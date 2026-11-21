@@ -8,6 +8,7 @@ Feasibility = Literal["verified", "requires_site_inspection", "unsuitable"]
 PriorityBand = Literal["high", "standard", "unknown"]
 CostStatus = Literal["indicative", "verified"]
 PlanStatus = Literal["optimal", "feasible", "no_eligible_interventions", "no_affordable_interventions"]
+PlanStrategy = Literal["balanced", "immediate_shade"]
 ShadeHorizon = Literal["after_installation", "at_tree_maturity"]
 Percent = Annotated[float, Field(ge=0, le=100, allow_inf_nan=False)]
 Budget = Annotated[Decimal, Field(ge=0, le=100_000_000, decimal_places=2)]
@@ -222,6 +223,7 @@ class OptimizeRequest(BaseModel):
 
     budget_eur: Budget
     include_inspection: bool = False
+    strategy: PlanStrategy = "balanced"
 
 
 class Plan(BaseModel):
@@ -233,6 +235,7 @@ class Plan(BaseModel):
     selected: list[ExplainedIntervention]
     status: PlanStatus
     include_inspection: bool
+    strategy: PlanStrategy
     priority_site_count: int
     shade_impact: PlanShadeImpact
     greened_roof_area_m2: float

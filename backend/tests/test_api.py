@@ -264,3 +264,16 @@ def test_green_roof_area_is_separate_from_street_shade(data: dict) -> None:
     assert roof.greened_roof_area_m2 == plan.greened_roof_area_m2 == 105.5
     assert roof.shade_impact is None
     assert plan.shade_impact.after_installation.max_m2 == 45
+
+
+def test_immediate_shade_strategy_uses_lower_footprint_before_benefit(data: dict) -> None:
+    data["interventions"][0]["modeled_benefit"] = 100
+    analysis = AthensAnalysis(Dataset.model_validate(data))
+    balanced = optimize(analysis, OptimizeRequest(budget_eur=50_000))
+    immediate = optimize(analysis, OptimizeRequest(budget_eur=50_000, strategy="immediate_shade"))
+    assert balanced.strategy == "balanced"
+    assert [row.id for row in balanced.selected] == ["tree-a"]
+    assert immediate.strategy == "immediate_shade"
+    assert [row.id for row in immediate.selected] == ["shade-a"]
+    assert immediate.priority_site_count == balanced.priority_site_count == 1
+    assert immediate.shade_impact.after_installation.min_m2 == 36

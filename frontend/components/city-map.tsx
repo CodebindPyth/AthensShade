@@ -45,8 +45,8 @@ export default function CityMap({ heat, trees, context, locations, selectedId, p
   const instance = useRef<L.Map | null>(null)
   const areaBounds = useRef<L.LatLngBounds | null>(null)
   const [showHeat, setShowHeat] = useState(true)
-  const [showCanopy, setShowCanopy] = useState(true)
-  const [showPlantings, setShowPlantings] = useState(true)
+  const [showCanopy, setShowCanopy] = useState(false)
+  const [showPlantings, setShowPlantings] = useState(false)
   const [showSchools, setShowSchools] = useState(false)
   const [showLayers, setShowLayers] = useState(false)
   const [tilesAvailable, setTilesAvailable] = useState(true)
@@ -69,9 +69,10 @@ export default function CityMap({ heat, trees, context, locations, selectedId, p
     for (const [name, zIndex] of [["heat", 380], ["context", 410], ["trees", 420]] as const) {
       map.createPane(name).style.zIndex = String(zIndex)
     }
-    const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      className: "city-basemap",
       maxNativeZoom: 19,
-      attribution: '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap</a> · <a href="https://carto.com/attributions">© CARTO</a>',
+      attribution: '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>',
     })
     let loadedTiles = 0
     tiles.on("tileload", () => { loadedTiles += 1; setTilesAvailable(true) })

@@ -8,7 +8,7 @@ import type { TileSelection } from "../components/city-map"
 import { MicroclimateMonitor } from "../components/microclimate-monitor"
 import { Planner } from "../components/planner"
 import { api } from "../lib/api"
-import type { Analysis, Comparison, DataSource, Dataset, Layers, Location, Plan } from "../lib/api"
+import type { Analysis, Comparison, DataSource, Dataset, Layers, Location, Plan, Strategy } from "../lib/api"
 import { euros, feasibilityLabel, interventionLabel, numeric, shadeArea, shadeLabel, temperature } from "../lib/format"
 
 const CityMap = dynamic(() => import("../components/city-map"), {
@@ -35,6 +35,7 @@ export default function AthensShade() {
   const [budget, setBudget] = useState(String(defaultBudget))
   const [baseline, setBaseline] = useState("50000")
   const [includeInspection, setIncludeInspection] = useState(false)
+  const [strategy, setStrategy] = useState<Strategy>("balanced")
   const [plan, setPlan] = useState<Plan | null>(null)
   const [busy, setBusy] = useState(true)
   const [planError, setPlanError] = useState<string | null>(null)
@@ -72,7 +73,7 @@ export default function AthensShade() {
 
   useEffect(() => {
     const controller = new AbortController()
-    api.optimize({ budget_eur: defaultBudget, include_inspection: false }, controller.signal)
+    api.optimize({ budget_eur: defaultBudget, include_inspection: false, strategy: "balanced" }, controller.signal)
       .then((result) => { if (!controller.signal.aborted) setPlan(result) })
       .catch(() => { if (!controller.signal.aborted) setPlanError("Δεν ήταν δυνατός ο υπολογισμός του πλάνου. Δοκίμασε ξανά.") })
       .finally(() => { if (!controller.signal.aborted) setBusy(false) })
@@ -126,7 +127,7 @@ export default function AthensShade() {
     setBusy(true)
     setPlanError(null)
     try {
-      setPlan(await api.optimize({ budget_eur: amount, include_inspection: includeInspection }))
+      setPlan(await api.optimize({ budget_eur: amount, include_inspection: includeInspection, strategy }))
     } catch {
       setPlanError("Δεν ήταν δυνατός ο υπολογισμός του πλάνου. Δοκίμασε ξανά.")
     } finally {
@@ -146,8 +147,8 @@ export default function AthensShade() {
     setComparisonError(null)
     try {
       setComparison(await api.compare(
-        { budget_eur: initial, include_inspection: includeInspection },
-        { budget_eur: current, include_inspection: includeInspection },
+        { budget_eur: initial, include_inspection: includeInspection, strategy },
+        { budget_eur: current, include_inspection: includeInspection, strategy },
       ))
     } catch {
       setComparisonError("Δεν ήταν δυνατή η σύγκριση των πλάνων. Δοκίμασε ξανά.")
@@ -157,10 +158,12 @@ export default function AthensShade() {
   }
 
   const currentAnalysis = analysis?.location.id === selectedId ? analysis : null
-  const isStale = plan !== null && (parseBudget(budget) !== plan.budget_eur || includeInspection !== plan.include_inspection)
+  const isStale = plan !== null && (parseBudget(budget) !== plan.budget_eur || includeInspection !== plan.include_inspection || strategy !== plan.strategy)
   const currentComparison = comparison?.baseline.budget_eur === parseBudget(baseline)
     && comparison.proposed.budget_eur === parseBudget(budget)
-    && comparison.proposed.include_inspection === includeInspection ? comparison : null
+    && comparison.proposed.include_inspection === includeInspection
+    && comparison.baseline.strategy === strategy
+    && comparison.proposed.strategy === strategy ? comparison : null
 
   return (
     <>
@@ -230,6 +233,7 @@ export default function AthensShade() {
           </section>
           <Planner
             budget={budget} setBudget={setBudget} includeInspection={includeInspection}
+            strategy={strategy} setStrategy={setStrategy}
             setIncludeInspection={setIncludeInspection} busy={busy} comparisonBusy={comparisonBusy}
             error={planError} comparisonError={comparisonError} plan={plan} comparison={currentComparison}
             isStale={isStale} compareOpen={compareOpen} toggleCompare={() => setCompareOpen(!compareOpen)}

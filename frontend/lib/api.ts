@@ -52,7 +52,8 @@ export type Dataset = {
 export type DataSource = { id: string; title: string; url: string | null; period: string | null; kind: string; license?: string | null }
 export type DataSources = { dataset_version: string; sources: DataSource[] }
 export type Analysis = { location: Location; interventions: Intervention[]; explanation: string }
-export type Scenario = { budget_eur: number; include_inspection: boolean }
+export type Strategy = "balanced" | "immediate_shade"
+export type Scenario = { budget_eur: number; include_inspection: boolean; strategy: Strategy }
 export type ShadeRange = { min_m2: number; max_m2: number }
 export type ShadeImpact = {
   after_installation: ShadeRange

@@ -2,7 +2,7 @@
 
 import { ArrowDownUp, CheckCircle2, CircleAlert, FileText, House, MapPin, Minus, Plus, ShieldCheck, TreeDeciduous } from "lucide-react"
 import type { FormEvent } from "react"
-import type { Comparison, Location, Plan } from "../lib/api"
+import type { Comparison, Location, Plan, Strategy } from "../lib/api"
 import { euros, feasibilityLabel, interventionLabel, shadeArea } from "../lib/format"
 
 type PlannerProps = {
@@ -10,6 +10,8 @@ type PlannerProps = {
   setBudget: (budget: string) => void
   includeInspection: boolean
   setIncludeInspection: (include: boolean) => void
+  strategy: Strategy
+  setStrategy: (strategy: Strategy) => void
   busy: boolean
   comparisonBusy: boolean
   error: string | null
@@ -47,6 +49,13 @@ export function Planner(props: PlannerProps) {
           {budgetPresets.map((amount) => (
             <button key={amount} className={Number(budget) === amount ? "preset active" : "preset"} type="button" aria-pressed={Number(budget) === amount} onClick={() => props.setBudget(String(amount))}>{euros(amount)}</button>
           ))}
+        </div>
+        <div className="strategy-field">
+          <label htmlFor="plan-strategy">Στόχος σχεδίου</label>
+          <select id="plan-strategy" value={props.strategy} onChange={(event) => props.setStrategy(event.target.value === "immediate_shade" ? "immediate_shade" : "balanced")}>
+            <option value="balanced">Ισορροπημένο πλάνο</option>
+            <option value="immediate_shade">Άμεση σκίαση</option>
+          </select>
         </div>
         <label className="inspection-check">
           <input type="checkbox" checked={includeInspection} onChange={(event) => props.setIncludeInspection(event.target.checked)} />

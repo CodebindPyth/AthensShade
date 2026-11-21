@@ -4,7 +4,16 @@ from decimal import Decimal
 from ortools.sat.python import cp_model
 
 from .analysis import AthensAnalysis
-from .models import ExplainedIntervention, FootprintRange, OptimizeRequest, Plan, PlanShadeImpact, PlanStatus, ShadeHorizon
+from .models import (
+    ExplainedIntervention,
+    FootprintRange,
+    OptimizeRequest,
+    Plan,
+    PlanShadeImpact,
+    PlanStatus,
+    PlanStrategy,
+    ShadeHorizon,
+)
 
 
 class OptimizationError(Exception):
@@ -39,7 +48,9 @@ def optimize(analysis: AthensAnalysis, request: OptimizeRequest) -> Plan:
             else None
             for option in options
         ]
-        selected_indices, status = solve(options, costs, densities, int(request.budget_eur * 100))
+        selected_indices, status = solve(
+            options, costs, densities, int(request.budget_eur * 100), request.strategy,
+        )
         selected_indices.sort(key=lambda index: (
             options[index].priority_band != "high",
             -(densities[index] or 0),
@@ -59,6 +70,7 @@ def optimize(analysis: AthensAnalysis, request: OptimizeRequest) -> Plan:
         selected=picks,
         status=status,
         include_inspection=request.include_inspection,
+        strategy=request.strategy,
         priority_site_count=sum(row.priority_band == "high" for row in picks),
         shade_impact=summarize_shade(picks),
         greened_roof_area_m2=round(sum(row.greened_roof_area_m2 or 0 for row in picks), 2),
@@ -89,6 +101,7 @@ def solve(
     costs: list[int],
     densities: list[float | None],
     budget_cents: int,
+    strategy: PlanStrategy,
 ) -> tuple[list[int], PlanStatus]:
     model = cp_model.CpModel()
     selected = [model.new_bool_var(option.id) for option in options]
@@ -113,7 +126,16 @@ def solve(
     )
     order = cp_model.LinearExpr.weighted_sum(selected, range(1, len(selected) + 1))
     # Freeze each proven optimum before considering the next objective.
-    objectives = [hotspot_count, population_exposure, total_benefit, -total_cost, -order]
+    objectives = [hotspot_count, population_exposure]
+    if strategy == "immediate_shade":
+        immediate_footprints = [
+            round(option.shade_impact.estimated_min_m2 * 100)
+            if option.shade_impact and option.shade_impact.horizon == "after_installation"
+            else 0
+            for option in options
+        ]
+        objectives.append(cp_model.LinearExpr.weighted_sum(selected, immediate_footprints))
+    objectives.extend([total_benefit, -total_cost, -order])
     solver = cp_model.CpSolver()
     solver.parameters.num_search_workers = 1
     solver.parameters.max_deterministic_time = 0.5
