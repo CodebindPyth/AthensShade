@@ -19,6 +19,9 @@ from .models import (
 from .thermal import project_thermal_impact
 
 EAST_ATHENS_LONGITUDE = 23.741
+WEST_ATHENS_LONGITUDE = 23.724
+WESTERN_PLANTING_SITES = frozenset({"avdi", "dourouti", "koumoundourou", "ramnes"})
+
 
 class OptimizationError(Exception):
     """The solver could not produce a usable plan."""
@@ -171,18 +174,32 @@ def solve(
             tree_sites = cp_model.LinearExpr.weighted_sum(selected, [int(count > 0) for count in tree_counts])
             mixed_sites = model.new_int_var(0, len(by_location), "neighborhood_mix")
             model.add_min_equality(mixed_sites, [tree_sites, 2 * counts[1]])
+            longitudes = [((option.siting or {}).get("evidence") or {}).get("longitude") for option in options]
             eastern_tree_counts = [
-                trees if ((option.siting or {}).get("evidence") or {}).get("longitude", 0) >= EAST_ATHENS_LONGITUDE else 0
-                for option, trees in zip(options, tree_counts, strict=True)
+                trees if longitude is not None and longitude >= EAST_ATHENS_LONGITUDE else 0
+                for trees, longitude in zip(tree_counts, longitudes, strict=True)
+            ]
+            western_tree_counts = [
+                trees if longitude is not None and longitude < WEST_ATHENS_LONGITUDE else 0
+                for trees, longitude in zip(tree_counts, longitudes, strict=True)
             ]
             east_tree_sites = cp_model.LinearExpr.weighted_sum(selected, [int(units > 0) for units in eastern_tree_counts])
-            east_coverage = model.new_int_var(0, 2, "eastern_tree_coverage")
-            model.add_min_equality(east_coverage, [east_tree_sites, 2])
+            east_coverage = model.new_int_var(0, 5, "eastern_tree_coverage")
+            model.add_min_equality(east_coverage, [east_tree_sites, 5])
             east_units = model.new_int_var(0, 60, "eastern_tree_units")
             model.add_min_equality(east_units, [cp_model.LinearExpr.weighted_sum(selected, eastern_tree_counts), 60])
-            # Policy weights favor reaching another screened plaza and a mix of
-            # immediate shelters and mature trees before concentrating all spending.
-            balanced_score = counts[0] + 16 * counts[1] + 40 * ground_sites + 15 * mixed_sites + 68 * east_coverage + 2 * east_units
+            west_units = model.new_int_var(0, 32, "western_tree_units")
+            model.add_min_equality(west_units, [cp_model.LinearExpr.weighted_sum(selected, western_tree_counts), 32])
+            western_planting_sites = cp_model.LinearExpr.weighted_sum(selected, [
+                int(trees > 0 and option.location_id in WESTERN_PLANTING_SITES)
+                for option, trees in zip(options, western_tree_counts, strict=True)
+            ])
+            # Keep the east planting incentive and reward reopening screened western
+            # candidate sites before allocating the entire budget to a few groups.
+            balanced_score = (
+                counts[0] + 16 * counts[1] + 40 * ground_sites + 15 * mixed_sites
+                + 68 * east_coverage + 2 * east_units + 68 * western_planting_sites + 2 * west_units
+            )
             objectives = [sum(coverage), balanced_score, hotspot_count]
         elif strategy in {"tree_priority", "shade_and_rest"}:
             objectives.extend([sum(coverage), counts[1]])

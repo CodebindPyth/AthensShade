@@ -7,7 +7,7 @@ from app.analysis import ATHENS_RED_SURFACE_TEMPERATURE_C
 from app.main import DEFAULT_DATASET_PATH, create_app, load_dataset
 from app.models import OptimizeRequest
 from app.municipal_sites import _inside_ring, _point_feature
-from app.optimizer import EAST_ATHENS_LONGITUDE, optimize
+from app.optimizer import EAST_ATHENS_LONGITUDE, WEST_ATHENS_LONGITUDE, WESTERN_PLANTING_SITES, optimize
 
 
 def test_ground_options_use_screened_geometry_and_respect_capacity():
@@ -69,3 +69,22 @@ def test_municipal_advice_is_grounded_in_registered_heat_site(monkeypatch):
             assert advice.status_code == 200
             assert set(advice.json()["studies"]) == {"tree_planting", "green_roof"}
         assert client.get("/api/locations/avdi/municipal-advice").status_code == 404
+
+
+def test_balanced_plan_combines_eastern_and_original_western_tree_sites():
+    stat = DEFAULT_DATASET_PATH.stat()
+    analysis = load_dataset(DEFAULT_DATASET_PATH, stat.st_mtime_ns, stat.st_size)
+    plan = optimize(analysis, OptimizeRequest(
+        budget_eur=150_000, include_inspection=True, priority_only=True, strategy="balanced",
+    ))
+
+    trees = [item for item in plan.selected if item.type == "tree_planting"]
+    west = [item for item in trees if item.siting["evidence"]["longitude"] < WEST_ATHENS_LONGITUDE]
+    east = [item for item in trees if item.siting["evidence"]["longitude"] >= EAST_ATHENS_LONGITUDE]
+
+    assert plan.total_cost_eur <= plan.budget_eur
+    assert WESTERN_PLANTING_SITES <= {item.location_id for item in west}
+    assert {"siting-goudi-army-park", "siting-rigillis"} <= {item.location_id for item in east}
+    assert len(east) >= 5
+    assert sum(item.shade_impact.unit_count for item in east) >= 60
+    assert sum(item.shade_impact.unit_count for item in west) >= 30
