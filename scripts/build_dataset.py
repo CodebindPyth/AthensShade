@@ -24,9 +24,20 @@ PROJECT = Path(__file__).resolve().parents[1]
 CITY = 'https://opendata.cityofathens.gr/dataset/'
 CITY_LICENSE = 'CC BY 3.0 Greece · https://creativecommons.org/licenses/by/3.0/gr/'
 ATLAS_PAGE = CITY + 'gis-athens-057aff6a-f337-11ee-b64b-0242ac120004'
+ATLAS_CATALOG = 'https://data.gov.gr/dataset/cityofathens-63a5a390-256b-4ca9-b266-1b4689db033d'
 DISTRICTS_PAGE = CITY + 'gis-athens-26fc7f34-6439-11ee-88f1-0242ac120004'
 SCHOOLS_PAGE = CITY + 'gis-athens-3bbfb156-7722-11ee-bdf0-0242ac120004'
 TREES_PAGE = 'https://athenstrees.cityofathens.gr/'
+PARKS_PAGE = 'https://www.cityofathens.gr/poy-tha-vro-pocket-parks-stin-athina/'
+PARKS_WFS = 'https://api.gis.cityofathens.gr/geoserver/ows?' + urlencode({
+    'service': 'WFS',
+    'version': '2.0.0',
+    'request': 'GetFeature',
+    'typeNames': 'athensgis:pois_pocketparks',
+    'outputFormat': 'application/json',
+    'srsName': 'EPSG:4326',
+    'count': 200,
+})
 CANOPY_SERVICE = (
     'https://image.discomap.eea.europa.eu/arcgis/rest/services/'
     'GioLandPublic/HRL_TreeCoverDensity_2018/ImageServer/exportImage'
@@ -98,12 +109,15 @@ def source_registry(snapshot_date):
     return [
         source('athens-atlas', 'Athens Temperature Atlas · Δήμος Αθηναίων', ATLAS_PAGE,
                'Ιούνιος–Αύγουστος 2016–2020', 'heat', license=CITY_LICENSE,
+               catalog_url=ATLAS_CATALOG,
                credit='EXTREMA Global Services και ARTi Analytics BV',
                description='Μέση ημερήσια θερμοκρασία επιφάνειας σε °C. Σταθμισμένος μέσος ανά κελί 175 μ.'),
         source('athens-districts', 'Δημοτικές κοινότητες · Δήμος Αθηναίων', DISTRICTS_PAGE,
                'Δημοτικό σύνολο GIS', 'boundary', license=CITY_LICENSE),
         source('athens-schools', 'Δημόσια σχολεία · Δήμος Αθηναίων', SCHOOLS_PAGE,
                '2023', 'schools', license=CITY_LICENSE),
+        source('athens-pocket-parks', 'Πάρκα τσέπης · Δήμος Αθηναίων', PARKS_PAGE,
+               'Στιγμιότυπο δημοτικού GIS', 'pocket_parks', catalog_url=PARKS_WFS),
         source('athens-sites', 'Σημεία αναφοράς δημοσίων χώρων · Απόφαση 717/2025', COUNCIL_DECISION,
                '2025', 'locations'),
         source('copernicus-canopy', 'Δενδροκάλυψη · Copernicus / EEA',
@@ -295,6 +309,22 @@ def normalized_context(districts, schools, school_names):
     return district_shapes, features
 
 
+def pocket_parks(path, boundary):
+    raw = json.loads(path.read_text(encoding='utf-8'))
+    if raw.get('type') != 'FeatureCollection' or not raw.get('features'):
+        raise ValueError('Municipal pocket park WFS returned no feature collection')
+    parks = []
+    for row in sorted(raw['features'], key=lambda row: row['id']):
+        geometry = shape(row['geometry'])
+        point = change_crs(geometry, GEOGRAPHIC_CRS, ATHENS_CRS)
+        name = row['properties'].get('descr')
+        if point.geom_type != 'Point' or not isinstance(name, str) or not name.strip() or not boundary.covers(point):
+            raise ValueError(f'Invalid municipal pocket park: {row["id"]}')
+        parks.append(feature(point, kind='pocket_park', name=name.strip(),
+                             street=row['properties'].get('streetname'), source_id='athens-pocket-parks'))
+    return parks
+
+
 def planting_points(rows, boundary):
     projection = Transformer.from_crs(WEB_CRS, ATHENS_CRS, always_xy=True)
     points = {}
@@ -386,6 +416,7 @@ def build(raw, snapshot_date):
         'atlas': 'municipal-atlas.zip', 'districts': 'municipal-boundary.zip', 'schools': 'municipal-schools.zip',
         'canopy': 'copernicus-tcd2018.tif', 'plantings': 'athenstrees-map.json',
         'population': 'jrc-census-pop-2021.zip',
+        'parks': 'municipal-pocket-parks.geojson',
     }.items()}
     for key, page in [('atlas', ATLAS_PAGE), ('districts', DISTRICTS_PAGE), ('schools', SCHOOLS_PAGE)]:
         download_catalog_archive(page.rsplit('/', 1)[-1], paths[key])
@@ -395,11 +426,14 @@ def build(raw, snapshot_date):
         download(TREES_PAGE + 'api/public/map-locations', paths['plantings'])
     if not paths['population'].exists():
         download(POPULATION_DOWNLOAD, paths['population'])
+    if not paths['parks'].exists():
+        download(PARKS_WFS, paths['parks'])
 
     atlas, districts, schools = (read_catalog_geojson(paths[key]) for key in ('atlas', 'districts', 'schools'))
     school_names = school_name_map(paths['schools'])
     district_shapes, context = normalized_context(districts['features'], schools['features'], school_names)
     boundary = union_all(list(district_shapes.values()))
+    context.extend(pocket_parks(paths['parks'], boundary))
     atlas_polygons, atlas_temperatures = heat_geometries(atlas['features'])
     atlas_index = STRtree(atlas_polygons)
     plantings = planting_points(json.loads(paths['plantings'].read_text(encoding='utf-8')), boundary)
@@ -468,7 +502,7 @@ def build(raw, snapshot_date):
         print(location['id'], location['heat_c'], location['canopy_percent'], location['planting_records_count'],
               location['population_density_per_km2'])
 
-    return dict(dataset_version=f'athens-{snapshot_date}.2', sources=source_registry(snapshot_date),
+    return dict(dataset_version=f'athens-{snapshot_date}.3', sources=source_registry(snapshot_date),
                 heat=collection(heat), trees=collection(trees), context=collection(context),
                 locations=locations, interventions=interventions)
 

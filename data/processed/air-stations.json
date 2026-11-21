@@ -1,0 +1,32 @@
+[
+  {
+    "station_id": 67,
+    "observed_at": "2026-11-21T09:00:00Z",
+    "temperature_c": 21.49,
+    "humidity_pct": 53.73
+  },
+  {
+    "station_id": 102,
+    "observed_at": "2026-11-21T09:00:00Z",
+    "temperature_c": 20.41,
+    "humidity_pct": 55.24
+  },
+  {
+    "station_id": 103,
+    "observed_at": "2026-11-21T09:00:00Z",
+    "temperature_c": 20.61,
+    "humidity_pct": 54.64
+  },
+  {
+    "station_id": 107,
+    "observed_at": "2026-11-21T09:00:00Z",
+    "temperature_c": 20.67,
+    "humidity_pct": 54.66
+  },
+  {
+    "station_id": 110,
+    "observed_at": "2026-11-21T09:00:00Z",
+    "temperature_c": 24.0,
+    "humidity_pct": 47.29
+  }
+]

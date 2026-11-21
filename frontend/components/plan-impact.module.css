@@ -1,0 +1,165 @@
+.summary h3,
+.comparison h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.summary .metrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  margin: 7px 0;
+}
+
+.metrics .metric {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+}
+
+.metric + .metric {
+  border-top: 1px solid color-mix(in srgb, var(--green) 16%, transparent);
+}
+
+.metric dt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.metric svg {
+  flex: 0 0 auto;
+  color: var(--green);
+}
+
+.metric dd {
+  color: var(--green);
+  text-align: right;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.summary .caption,
+.comparison .caption {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.caption a {
+  color: var(--blue-deep);
+  text-underline-offset: 2px;
+}
+
+.comparison {
+  --value-width: 8.75rem;
+  margin-top: 12px;
+  padding: 11px 0 5px;
+  border-top: 1px solid var(--line);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  margin: 4px 0 7px;
+  color: var(--body);
+  font-size: 11px;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend li::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--scenario-color);
+  content: "";
+}
+
+.comparison [data-scenario="baseline"] {
+  --scenario-color: var(--muted);
+}
+
+.comparison [data-scenario="proposed"] {
+  --scenario-color: var(--green);
+}
+
+.axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 5px;
+  margin-right: calc(var(--value-width) + 8px);
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.seriesList > li {
+  margin-top: 6px;
+}
+
+.seriesList h4 {
+  margin: 0 0 1px;
+  color: var(--body);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.seriesPair {
+  display: grid;
+  gap: 2px;
+}
+
+.barRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--value-width);
+  align-items: center;
+  gap: 8px;
+}
+
+.track {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+}
+
+.upper,
+.lower {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--scenario-color);
+}
+
+.upper {
+  opacity: .36;
+}
+
+.barValue {
+  color: var(--body);
+  text-align: right;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.screenReader {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
+from .air import AIR_SOURCE, AirFeed, AirResponse
 from .analysis import TREE_DEFICIT_THRESHOLD_PERCENT, AthensAnalysis
 from .methodology import methodology
 from .models import (
@@ -54,6 +55,7 @@ def create_app(dataset_path: Path | None = None) -> FastAPI:
     )
     path = dataset_path or Path(os.getenv("ATHENSSHADE_DATA_PATH", str(DEFAULT_DATASET_PATH)))
     api = APIRouter(prefix="/api")
+    air_feed = AirFeed()
 
     def dataset_analysis() -> AthensAnalysis:
         try:
@@ -102,7 +104,11 @@ def create_app(dataset_path: Path | None = None) -> FastAPI:
 
     @api.get("/data-sources", tags=["Map"])
     def data_sources(analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)]) -> SourcesResponse:
-        return SourcesResponse(dataset_version=analysis.dataset.dataset_version, sources=analysis.dataset.sources)
+        return SourcesResponse(dataset_version=analysis.dataset.dataset_version, sources=[*analysis.dataset.sources, AIR_SOURCE])
+
+    @api.get("/air-observations", tags=["Map"])
+    def air_observations() -> AirResponse:
+        return air_feed.latest()
 
     @api.get("/methodology", tags=["Planning"])
     def planning_methodology() -> MethodologyResponse:

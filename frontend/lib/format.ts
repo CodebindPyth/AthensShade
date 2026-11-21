@@ -6,10 +6,19 @@ const currencyFormat = new Intl.NumberFormat("el-GR", {
 })
 
 const numberFormat = new Intl.NumberFormat("el-GR", { maximumFractionDigits: 2 })
+const observationTime = new Intl.DateTimeFormat("el-GR", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Europe/Athens",
+})
 
 export const euros = (value: number) => currencyFormat.format(value)
 export const numeric = (value: number) => numberFormat.format(value)
 export const temperature = (value: number) => `${numeric(value)} °C`
+export function localObservationTime(timestamp: string) {
+  const date = new Date(timestamp)
+  return Number.isFinite(date.getTime()) ? observationTime.format(date) : "Άγνωστη ώρα"
+}
 export const shadeArea = (lower: number, upper: number) => lower === upper ? `${numeric(lower)} m²` : `${numeric(lower)}–${numeric(upper)} m²`
 
 const typeLabels: Record<string, string> = {

@@ -49,8 +49,18 @@ export type Dataset = {
   heat_hotspot_threshold_c?: number | null
   tree_deficit_threshold_percent?: number
 }
-export type DataSource = { id: string; title: string; url: string | null; period: string | null; kind: string; license?: string | null }
+export type DataSource = { id: string; title: string; url: string | null; period: string | null; kind: string; license?: string | null; catalog_url?: string }
 export type DataSources = { dataset_version: string; sources: DataSource[] }
+export type AirReading = {
+  station_id: number
+  station_name: string
+  location_id: string
+  observed_at: string
+  temperature_c: number
+  humidity_pct: number | null
+  origin: "api" | "cache" | "snapshot"
+}
+export type AirObservations = { readings: AirReading[]; source_url: string; registry_url: string }
 export type Analysis = { location: Location; interventions: Intervention[]; explanation: string }
 export type Strategy = "balanced" | "immediate_shade"
 export type Scenario = { budget_eur: number; include_inspection: boolean; strategy: Strategy }
@@ -79,6 +89,7 @@ export type Layers = Record<LayerName, FeatureCollection>
 export const api = {
   locations: (signal?: AbortSignal) => request<Dataset>("/locations", { signal }),
   sources: (signal?: AbortSignal) => request<DataSources>("/data-sources", { signal }),
+  airObservations: (signal?: AbortSignal) => request<AirObservations>("/air-observations", { signal }),
   layer: (layer: LayerName, signal?: AbortSignal) => request<FeatureCollection>(`/layers/${layer}`, { signal }),
   analysis: (id: string, signal?: AbortSignal) => request<Analysis>(`/locations/${encodeURIComponent(id)}/analysis`, { signal }),
   optimize: (scenario: Scenario, signal?: AbortSignal) => post<Plan>("/optimize", scenario, signal),

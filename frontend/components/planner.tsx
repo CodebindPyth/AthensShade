@@ -4,6 +4,7 @@ import { ArrowDownUp, CheckCircle2, CircleAlert, FileText, House, MapPin, Minus,
 import type { FormEvent } from "react"
 import type { Comparison, Location, Plan, Strategy } from "../lib/api"
 import { euros, feasibilityLabel, interventionLabel, shadeArea } from "../lib/format"
+import { ImpactCard, ImpactComparison } from "./plan-impact"
 
 type PlannerProps = {
   budget: string
@@ -129,29 +130,6 @@ export function Planner(props: PlannerProps) {
   )
 }
 
-function ImpactCard({ plan }: { plan: Plan }) {
-  const immediate = plan.shade_impact?.after_installation
-  const maturity = plan.shade_impact?.at_tree_maturity
-  const roof = plan.greened_roof_area_m2 ?? 0
-  return (
-    <section className="shade-impact" aria-label="Εκτίμηση σκίασης και πρασίνου">
-      <strong>Εκτίμηση σκίασης και πρασίνου</strong>
-      {immediate && maturity && (immediate.max_m2 > 0 || maturity.max_m2 > 0) && (
-        <>
-          <dl>
-            <div><dt>Σκιά μετά την εγκατάσταση</dt><dd>{shadeArea(immediate.min_m2, immediate.max_m2)}</dd></div>
-            <div><dt>Σκιά στην ωρίμανση των δέντρων</dt><dd>{shadeArea(maturity.min_m2, maturity.max_m2)}</dd></div>
-          </dl>
-          <p>Ενδεικτική επιφάνεια σκιάς πριν από επικαλύψεις. Η σκιά μειώνει την έκθεση στον άμεσο ήλιο.</p>
-        </>
-      )}
-      {roof > 0 && <p className="roof-impact"><strong>{shadeArea(roof, roof)}</strong> ενδεικτικής φύτευσης σε δώματα. Η φύτευση περιορίζει την εκτεθειμένη επιφάνεια της στέγης.</p>}
-      <p>Η επίδραση στο μικροκλίμα αξιολογείται με επιτόπιες μετρήσεις θερμοκρασίας αέρα και θερμικής άνεσης, πριν και μετά.</p>
-      {!!plan.shade_impact?.unestimated_count && <p>Παρεμβάσεις χωρίς εκτίμηση άμεσης σκιάς · {plan.shade_impact.unestimated_count}</p>}
-    </section>
-  )
-}
-
 function ComparisonResults({ comparison, locations }: { comparison: Comparison; locations: Map<string, Location> }) {
   const selected = [...comparison.baseline.selected, ...comparison.proposed.selected]
   const label = (id: string) => {
@@ -168,19 +146,13 @@ function ComparisonResults({ comparison, locations }: { comparison: Comparison; 
   return (
     <>
       <div className="comparison-spend">
-        {[comparison.baseline, comparison.proposed].map((plan, index) => (
-          <div key={index}>
-            <span>{euros(plan.budget_eur)}<strong>{plan.selected.length} θέσεις</strong></span>
-            {plan.shade_impact && plan.selected.length > 0 && (
-              <ul className="comparison-impact">
-                <li>{shadeArea(plan.shade_impact.after_installation.min_m2, plan.shade_impact.after_installation.max_m2)} εγκατάστασης</li>
-                <li>{shadeArea(plan.shade_impact.at_tree_maturity.min_m2, plan.shade_impact.at_tree_maturity.max_m2)} ωρίμανσης</li>
-              </ul>
-            )}
-            {!!plan.greened_roof_area_m2 && <p className="comparison-impact">{shadeArea(plan.greened_roof_area_m2, plan.greened_roof_area_m2)} φυτεμένων δωμάτων</p>}
+        {[{ label: "Αρχικό", plan: comparison.baseline }, { label: "Νέο", plan: comparison.proposed }].map(({ label, plan }) => (
+          <div key={label}>
+            <span>{label} · {euros(plan.budget_eur)}<strong>Θέσεις · {plan.selected.length}</strong></span>
           </div>
         ))}
       </div>
+      <ImpactComparison baseline={comparison.baseline} proposed={comparison.proposed} />
       {comparison.proposed.include_inspection && <p className="notice notice--inspection">Και τα δύο πλάνα συμπεριλαμβάνουν θέσεις προς αυτοψία.</p>}
       <ul className="comparison-changes">
         {groups.map((group) => (

@@ -21,7 +21,7 @@ export function MicroclimateMonitor() {
   }
 
   return (
-    <details className={`panel ${styles.monitor}`}>
+    <details id="microclimate-monitor" className={`panel ${styles.monitor}`}>
       <summary className={styles.summary}>
         <Thermometer size={20} aria-hidden="true" />
         <span>Αποτίμηση μικροκλίματος μετά την παρέμβαση</span>

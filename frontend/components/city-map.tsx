@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import L from "leaflet"
 import { Crosshair, Layers3, Minus, Plus } from "lucide-react"
 import type { Feature, FeatureCollection } from "geojson"
-import type { Location } from "../lib/api"
-import { heatColor, heatThresholds, numeric, temperature } from "../lib/format"
+import type { AirObservations, AirReading, Location } from "../lib/api"
+import { heatColor, heatThresholds, localObservationTime, numeric, temperature } from "../lib/format"
 
 export type TileSelection = { temperature: number | null; sourceId: string | null; name?: string }
 
@@ -13,6 +13,7 @@ type MapProps = {
   heat?: FeatureCollection
   trees?: FeatureCollection
   context?: FeatureCollection
+  air?: AirObservations | null
   locations: Location[]
   selectedId: string | null
   plannedIds: string[]
@@ -40,7 +41,30 @@ function tooltip(label: string) {
   return content
 }
 
-export default function CityMap({ heat, trees, context, locations, selectedId, plannedIds, hotspotThreshold, onSelectLocation, onSelectTile }: MapProps) {
+function airPopup(reading: AirReading, air: AirObservations) {
+  const content = document.createElement("div")
+  content.className = "air-popup"
+  const name = document.createElement("strong")
+  name.textContent = reading.station_name
+  const measurement = document.createElement("span")
+  measurement.textContent = `Θερμοκρασία αέρα · ${temperature(reading.temperature_c)}`
+  const date = document.createElement("time")
+  date.dateTime = reading.observed_at
+  date.textContent = `${localObservationTime(reading.observed_at)} (ώρα Αθήνας)`
+  content.append(name, measurement, date)
+  if (reading.humidity_pct !== null) content.append(tooltip(`Σχετική υγρασία · ${numeric(reading.humidity_pct)}%`))
+  if (reading.origin !== "api") content.append(tooltip("Αποθηκευμένη παρατήρηση"))
+  content.append(tooltip("Ο δείκτης τοποθετείται στο αντίστοιχο σημείο αναφοράς της περιοχής."))
+  const source = document.createElement("a")
+  source.href = air.source_url
+  source.target = "_blank"
+  source.rel = "noopener noreferrer"
+  source.textContent = "Πηγή · Δήμος Αθηναίων"
+  content.append(source)
+  return content
+}
+
+export default function CityMap({ heat, trees, context, air, locations, selectedId, plannedIds, hotspotThreshold, onSelectLocation, onSelectTile }: MapProps) {
   const container = useRef<HTMLDivElement | null>(null)
   const instance = useRef<L.Map | null>(null)
   const areaBounds = useRef<L.LatLngBounds | null>(null)
@@ -48,6 +72,8 @@ export default function CityMap({ heat, trees, context, locations, selectedId, p
   const [showCanopy, setShowCanopy] = useState(false)
   const [showPlantings, setShowPlantings] = useState(false)
   const [showSchools, setShowSchools] = useState(false)
+  const [showAir, setShowAir] = useState(false)
+  const [showParks, setShowParks] = useState(false)
   const [showLayers, setShowLayers] = useState(false)
   const [tilesAvailable, setTilesAvailable] = useState(true)
   const [scale, setScale] = useState({ label: "1 km", width: 95 })
@@ -104,7 +130,8 @@ export default function CityMap({ heat, trees, context, locations, selectedId, p
     const shapes = L.geoJSON(context, {
       pane: "context",
       interactive: false,
-      filter: (feature) => !!feature.geometry && (feature.properties?.kind !== "school" || showSchools),
+      filter: (feature) => !!feature.geometry && feature.properties?.kind !== "pocket_park"
+        && (feature.properties?.kind !== "school" || showSchools),
       pointToLayer: (_, latlng) => L.circleMarker(latlng, {
         pane: "context", radius: 2.3, color: "#536080", weight: 1, fillColor: "#c2cce6", fillOpacity: 0.9, interactive: false,
       }),
@@ -131,6 +158,22 @@ export default function CityMap({ heat, trees, context, locations, selectedId, p
     }
     return () => { shapes.remove() }
   }, [context, showSchools])
+
+  useEffect(() => {
+    const map = instance.current
+    if (!showParks || !map || !context) return
+    const parks = L.geoJSON(context, {
+      filter: (feature) => feature.geometry?.type === "Point" && feature.properties?.kind === "pocket_park",
+      pointToLayer: (feature, point) => {
+        const name = asText(feature.properties?.name) ?? "Πάρκο τσέπης"
+        const street = asText(feature.properties?.street)
+        const icon = L.divIcon({ iconSize: [12, 12], className: "pocket-park-marker" })
+        return L.marker(point, { icon, title: name, alt: name })
+          .bindPopup(tooltip(street ? `${name} · ${street}` : name))
+      },
+    }).addTo(map)
+    return () => { parks.remove() }
+  }, [context, showParks])
 
   useEffect(() => {
     const map = instance.current
@@ -212,6 +255,30 @@ export default function CityMap({ heat, trees, context, locations, selectedId, p
 
   useEffect(() => {
     const map = instance.current
+    if (!map || !showAir || !air?.readings.length) return
+    const byLocation = new Map(locations.map((location) => [location.id, location]))
+    const layer = L.layerGroup().addTo(map)
+    for (const reading of air.readings) {
+      const anchor = byLocation.get(reading.location_id)
+      if (!anchor) continue
+      const label = `${reading.station_name}, θερμοκρασία αέρα ${temperature(reading.temperature_c)}`
+      const icon = L.divIcon({
+        html: tooltip("°"),
+        iconSize: [18, 18],
+        iconAnchor: [-7, 18],
+        popupAnchor: [16, -18],
+        className: "air-station",
+      })
+      const marker = L.marker([anchor.latitude, anchor.longitude], { icon, title: label, alt: label, zIndexOffset: 150 })
+        .bindPopup(airPopup(reading, air), { maxWidth: 240 })
+        .addTo(layer)
+      marker.getElement()?.setAttribute("aria-label", label)
+    }
+    return () => { layer.remove() }
+  }, [air, locations, showAir])
+
+  useEffect(() => {
+    const map = instance.current
     const selected = locations.find((location) => location.id === selectedId)
     if (map && selected) {
       const point: L.LatLngExpression = [selected.latitude, selected.longitude]
@@ -239,8 +306,13 @@ export default function CityMap({ heat, trees, context, locations, selectedId, p
       {showLayers && (
         <div className="map-layer-menu">
           <label><input type="checkbox" checked={showHeat} onChange={(event) => setShowHeat(event.target.checked)} /> Θερμοκρασία επιφάνειας</label>
+          <label><input type="checkbox" checked={showAir} onChange={(event) => setShowAir(event.target.checked)} /> Μετρήσεις αέρα</label>
+          {showAir && !air?.readings.length && (
+            <p className="air-layer-status" role="status">{air === undefined ? "Φόρτωση μετρήσεων…" : "Δεν υπάρχουν διαθέσιμες μετρήσεις."}</p>
+          )}
           <label><input type="checkbox" checked={showCanopy} onChange={(event) => setShowCanopy(event.target.checked)} /> Δενδροκάλυψη</label>
           <label><input type="checkbox" checked={showPlantings} onChange={(event) => setShowPlantings(event.target.checked)} /> Καταγραφές φύτευσης</label>
+          <label><input type="checkbox" checked={showParks} onChange={(event) => setShowParks(event.target.checked)} /> Πάρκα τσέπης</label>
           <label><input type="checkbox" checked={showSchools} onChange={(event) => setShowSchools(event.target.checked)} /> Δημόσια σχολεία</label>
         </div>
       )}
@@ -262,8 +334,10 @@ export default function CityMap({ heat, trees, context, locations, selectedId, p
           </div>
         )}
         <div className="legend-features">
+          {showAir && !!air?.readings.length && <span><i className="legend-swatch legend-swatch--air" /> Θερμοκρασία αέρα</span>}
           {showCanopy && <span><i className="legend-swatch legend-swatch--trees" /> Δενδροκάλυψη</span>}
           {showPlantings && <span><i className="legend-swatch legend-swatch--planting" /> Καταγραφές φύτευσης</span>}
+          {showParks && <span><i className="legend-swatch legend-swatch--park" /> Πάρκο τσέπης</span>}
           {showSchools && <span><i className="legend-swatch legend-swatch--schools" /> Δημόσια σχολεία</span>}
           <span><i className="legend-swatch legend-swatch--candidate" /> Υποψήφια θέση</span>
           {locations.some((location) => location.priority_band === "high") && <span><i className="legend-swatch legend-swatch--priority" /> Υψηλή προτεραιότητα</span>}

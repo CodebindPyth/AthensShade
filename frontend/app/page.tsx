@@ -8,7 +8,7 @@ import type { TileSelection } from "../components/city-map"
 import { MicroclimateMonitor } from "../components/microclimate-monitor"
 import { Planner } from "../components/planner"
 import { api } from "../lib/api"
-import type { Analysis, Comparison, DataSource, Dataset, Layers, Location, Plan, Strategy } from "../lib/api"
+import type { AirObservations, Analysis, Comparison, DataSource, Dataset, Layers, Location, Plan, Strategy } from "../lib/api"
 import { euros, feasibilityLabel, interventionLabel, numeric, shadeArea, shadeLabel, temperature } from "../lib/format"
 
 const CityMap = dynamic(() => import("../components/city-map"), {
@@ -25,6 +25,7 @@ export default function AthensShade() {
   const [dataset, setDataset] = useState<Dataset | null>(null)
   const [sources, setSources] = useState<DataSource[]>(noSources)
   const [layers, setLayers] = useState<Partial<Layers>>({})
+  const [air, setAir] = useState<AirObservations | null>()
   const [dataError, setDataError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -68,6 +69,14 @@ export default function AthensShade() {
       }
     }
     void loadData()
+    return () => controller.abort()
+  }, [retryCount])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    api.airObservations(controller.signal)
+      .then((result) => { if (!controller.signal.aborted) setAir(result) })
+      .catch(() => { if (!controller.signal.aborted) setAir(null) })
     return () => controller.abort()
   }, [retryCount])
 
@@ -189,6 +198,7 @@ export default function AthensShade() {
             <div className="map-shell">
               <CityMap
                 {...layers}
+                air={air}
                 locations={locations}
                 selectedId={selectedId}
                 plannedIds={plannedIds}
@@ -219,6 +229,7 @@ export default function AthensShade() {
             <p className="map-caption">
               {mapSource ? <><strong>Θερμικό επίπεδο</strong> · {mapSource.title}{mapSource.period && ` · ${mapSource.period}`} · </> : null}
               Θερμοκρασία επιφάνειας για την περίοδο της πηγής.
+              {!!air?.readings.length && <span> · {air.readings.length} κοντινοί σταθμοί αέρα στα επίπεδα του χάρτη.</span>}
             </p>
             {locations.length > 0 && (
               <div className="location-picker">
@@ -261,6 +272,12 @@ export default function AthensShade() {
                 <li key={source.id}>
                   <SourceTitle source={source} />
                   <p>{[source.period, source.license].filter(Boolean).join(" · ")}</p>
+                  {source.catalog_url?.startsWith("https://") && (
+                    <a className="data-source-catalog" href={source.catalog_url} target="_blank" rel="noreferrer">
+                      {source.catalog_url.startsWith("https://data.gov.gr/") ? "Κατάλογος data.gov.gr" : "Γεωχωρικό API"}
+                      <ExternalLink size={11} aria-hidden="true" />
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>
