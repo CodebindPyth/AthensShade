@@ -28,7 +28,7 @@ export function AiBrief({ plan, isStale }: { plan: Plan | null; isStale: boolean
 
 function planKey(plan: Plan) {
   return JSON.stringify([
-    plan.dataset_version, plan.budget_eur, plan.include_inspection, plan.strategy, plan.total_cost_eur,
+    plan.dataset_version, plan.budget_eur, plan.include_inspection, plan.strategy, plan.priority_only, plan.total_cost_eur,
     plan.selected.map(({ id }) => id),
   ])
 }
@@ -68,6 +68,7 @@ function BriefActions({ plan }: { plan: Plan }) {
     try {
       const response = await api.aiBrief({
         budget_eur: plan.budget_eur,
+        priority_only: plan.priority_only,
         include_inspection: plan.include_inspection,
         strategy: plan.strategy,
       }, controller.signal)

@@ -30,16 +30,14 @@
 .cost strong { color: var(--ink); font-size: 17px; }
 .empty { margin-top: 8px; font-size: 14px; }
 
-.columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  margin-top: 18px;
+.sectionBody, .impactRows {
+  margin-top: 15px;
   border-top: 1px solid var(--line);
 }
 
-.thermal, .finance { min-width: 0; padding-top: 16px; }
-.thermal { padding-right: 21px; }
-.finance { border-left: 1px solid var(--line); padding-left: 21px; }
+.heading > svg { color: var(--blue); }
+.finance { max-width: 850px; padding-top: 15px; }
+.impactRows { list-style: none; padding-left: 0; }
 
 .subheading {
   display: flex;
@@ -147,9 +145,6 @@
 
 @media (max-width: 760px) {
   .panel { padding: 16px; }
-  .columns { grid-template-columns: minmax(0, 1fr); margin-top: 13px; }
-  .thermal { padding-right: 0; }
-  .finance { border-left: 0; border-top: 1px solid var(--line); margin-top: 14px; padding-left: 0; }
 }
 
 @media (max-width: 350px) {

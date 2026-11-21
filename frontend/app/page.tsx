@@ -1,13 +1,12 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { ChevronRight, CircleAlert, Database, ExternalLink, MapPin, Sunrise, X } from "lucide-react"
+import { ChevronRight, CircleAlert, ExternalLink, MapPin, Sunrise, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { FormEvent } from "react"
 import type { TileSelection } from "../components/city-map"
 import { AiBrief } from "../components/ai-brief"
-import { EvidenceSearch } from "../components/evidence-search"
-import { InvestmentPanel } from "../components/investment-panel"
+import { CoolingEstimates, InvestmentPanel } from "../components/investment-panel"
 import { MicroclimateMonitor } from "../components/microclimate-monitor"
 import { Planner } from "../components/planner"
 import { api } from "../lib/api"
@@ -38,10 +37,10 @@ export default function AthensShade() {
   const [analysisErrorId, setAnalysisErrorId] = useState<string | null>(null)
   const [budget, setBudget] = useState(String(defaultBudget))
   const [baseline, setBaseline] = useState("50000")
-  const [includeInspection, setIncludeInspection] = useState(false)
+  const [includeInspection, setIncludeInspection] = useState(true)
   const [strategy, setStrategy] = useState<Strategy>("balanced")
   const [plan, setPlan] = useState<Plan | null>(null)
-  const [busy, setBusy] = useState(true)
+  const [busy, setBusy] = useState(false)
   const [planError, setPlanError] = useState<string | null>(null)
   const [compareOpen, setCompareOpen] = useState(false)
   const [comparisonBusy, setComparisonBusy] = useState(false)
@@ -84,15 +83,6 @@ export default function AthensShade() {
   }, [retryCount])
 
   useEffect(() => {
-    const controller = new AbortController()
-    api.optimize({ budget_eur: defaultBudget, include_inspection: false, strategy: "balanced" }, controller.signal)
-      .then((result) => { if (!controller.signal.aborted) setPlan(result) })
-      .catch(() => { if (!controller.signal.aborted) setPlanError("Δεν ήταν δυνατός ο υπολογισμός του πλάνου. Δοκίμασε ξανά.") })
-      .finally(() => { if (!controller.signal.aborted) setBusy(false) })
-    return () => controller.abort()
-  }, [])
-
-  useEffect(() => {
     if (!selectedId) return
     const controller = new AbortController()
     setAnalysisErrorId(null)
@@ -113,7 +103,6 @@ export default function AthensShade() {
   const sourceById = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources])
   const mapSource = sourceById.get(String(layers.heat?.features[0]?.properties?.source_id ?? ""))
   const selectedLocation = selectedId === null ? null : locationById.get(selectedId) ?? null
-  const plannedIds = useMemo(() => plan?.selected.map((item) => item.location_id) ?? [], [plan])
 
   const onSelectLocation = useCallback((id: string) => {
     setSelectedTile(null)
@@ -139,7 +128,9 @@ export default function AthensShade() {
     setBusy(true)
     setPlanError(null)
     try {
-      setPlan(await api.optimize({ budget_eur: amount, include_inspection: includeInspection, strategy }))
+      const updatedPlan = await api.optimize({ budget_eur: amount, include_inspection: includeInspection, strategy, priority_only: true })
+      closeSelection()
+      setPlan(updatedPlan)
     } catch {
       setPlanError("Δεν ήταν δυνατός ο υπολογισμός του πλάνου. Δοκίμασε ξανά.")
     } finally {
@@ -159,8 +150,8 @@ export default function AthensShade() {
     setComparisonError(null)
     try {
       setComparison(await api.compare(
-        { budget_eur: initial, include_inspection: includeInspection, strategy },
-        { budget_eur: current, include_inspection: includeInspection, strategy },
+        { budget_eur: initial, include_inspection: includeInspection, strategy, priority_only: true },
+        { budget_eur: current, include_inspection: includeInspection, strategy, priority_only: true },
       ))
     } catch {
       setComparisonError("Δεν ήταν δυνατή η σύγκριση των πλάνων. Δοκίμασε ξανά.")
@@ -171,6 +162,8 @@ export default function AthensShade() {
 
   const currentAnalysis = analysis?.location.id === selectedId ? analysis : null
   const isStale = plan !== null && (parseBudget(budget) !== plan.budget_eur || includeInspection !== plan.include_inspection || strategy !== plan.strategy)
+  const mappedPlan = isStale || busy ? null : plan
+  const selectedHasTree = mappedPlan?.selected.some((item) => item.location_id === selectedId)
   const currentComparison = comparison?.baseline.budget_eur === parseBudget(baseline)
     && comparison.proposed.budget_eur === parseBudget(budget)
     && comparison.proposed.include_inspection === includeInspection
@@ -187,7 +180,6 @@ export default function AthensShade() {
             <strong>AthensShade</strong>
           </a>
           <span className="header-description">Χάρτης και παρεμβάσεις</span>
-          <a className="header-sources" href="#sources"><Database size={16} /> Πηγές δεδομένων</a>
         </div>
       </header>
       <main className="workspace" id="main">
@@ -204,12 +196,11 @@ export default function AthensShade() {
                 air={air}
                 locations={locations}
                 selectedId={selectedId}
-                plannedIds={plannedIds}
+                plan={mappedPlan}
                 hotspotThreshold={dataset?.heat_hotspot_threshold_c}
-                onSelectLocation={onSelectLocation}
                 onSelectTile={onSelectTile}
               />
-              {(selectedLocation || selectedTile) && (
+              {((selectedLocation && !selectedHasTree) || selectedTile) && (
                 <div className="map-selection" role="status">
                   <button className="selection-close" type="button" aria-label="Κλείσιμο πληροφοριών σημείου" onClick={closeSelection}><X size={17} /></button>
                   {selectedLocation ? (
@@ -267,28 +258,9 @@ export default function AthensShade() {
           />
         )}
         <AiBrief plan={plan} isStale={isStale} />
-        <InvestmentPanel plan={plan} isStale={isStale} locations={locationById} comparison={currentComparison} />
+        <CoolingEstimates plan={plan} isStale={isStale} locations={locationById} />
+        <InvestmentPanel plan={plan} isStale={isStale} comparison={currentComparison} />
         <MicroclimateMonitor />
-        <section className="panel sources" id="sources" aria-labelledby="sources-title">
-          <div className="sources-heading"><h2 id="sources-title">Πηγές δεδομένων</h2>{dataset && <small>{dataset.dataset_version}</small>}</div>
-          <EvidenceSearch />
-          {sources.length > 0 ? (
-            <ul>
-              {sources.map((source) => (
-                <li key={source.id}>
-                  <SourceTitle source={source} />
-                  <p>{[source.period, source.license].filter(Boolean).join(" · ")}</p>
-                  {source.catalog_url?.startsWith("https://") && (
-                    <a className="data-source-catalog" href={source.catalog_url} target="_blank" rel="noreferrer">
-                      {source.catalog_url.startsWith("https://data.gov.gr/") ? "Κατάλογος data.gov.gr" : "Γεωχωρικό API"}
-                      <ExternalLink size={11} aria-hidden="true" />
-                    </a>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : <p className="muted">Οι πηγές εμφανίζονται μόλις φορτωθούν τα δεδομένα.</p>}
-        </section>
       </main>
     </>
   )

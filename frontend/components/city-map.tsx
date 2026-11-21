@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import L from "leaflet"
-import { Crosshair, Layers3, Minus, Plus } from "lucide-react"
+import { Crosshair, Layers3, Minus, Plus, TreeDeciduous, X } from "lucide-react"
 import type { Feature, FeatureCollection } from "geojson"
-import type { AirObservations, AirReading, Location } from "../lib/api"
+import type { AirObservations, AirReading, Location, Plan } from "../lib/api"
 import { heatColor, heatThresholds, localObservationTime, numeric, temperature } from "../lib/format"
+import { TreePopupCard } from "./tree-popup-card"
+import styles from "./city-map.module.css"
 
 export type TileSelection = { temperature: number | null; sourceId: string | null; name?: string }
 
@@ -16,15 +18,26 @@ type MapProps = {
   air?: AirObservations | null
   locations: Location[]
   selectedId: string | null
-  plannedIds: string[]
+  plan: Plan | null
   hotspotThreshold?: number | null
-  onSelectLocation: (id: string) => void
   onSelectTile: (tile: TileSelection) => void
 }
 
 const cityCenter: L.LatLngExpression = [37.991, 23.731]
 const cityZoom = 12
-const markerPin = '<svg width="23" height="27" viewBox="0 0 23 27" fill="none" aria-hidden="true"><path d="M11.5 1.2a9.7 9.7 0 0 0-9.7 9.7c0 6.7 9.7 14.7 9.7 14.7s9.7-8 9.7-14.7a9.7 9.7 0 0 0-9.7-9.7Z" stroke="white" stroke-width="2"/><circle cx="11.5" cy="10.9" r="3" fill="white"/></svg>'
+const treeGlyph = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5m0 0 3.5-3.5M12 17l-2.5-2.5M7 17a4 4 0 0 1-1.3-7.8A5.8 5.8 0 0 1 11.5 3a6 6 0 0 1 5.8 4.4A4.9 4.9 0 0 1 16 17h-1"/></svg>'
+
+type TreeSelection = { id: string; plan: Plan }
+type CardPosition = { left: number; top: number; width: number; height: number; anchor: number }
+
+function fitCity(map: L.Map, bounds: L.LatLngBounds | null) {
+  if (bounds) map.fitBounds(bounds, { maxZoom: 14, padding: [22, 38], animate: false })
+  else map.setView(cityCenter, cityZoom, { animate: false })
+}
+
+function treeCardWidth(mapWidth: number) {
+  return Math.max(1, Math.min(302, mapWidth - 24))
+}
 
 function temperatureOf(feature?: Feature) {
   const number = feature?.properties?.temperature_c
@@ -64,10 +77,15 @@ function airPopup(reading: AirReading, air: AirObservations) {
   return content
 }
 
-export default function CityMap({ heat, trees, context, air, locations, selectedId, plannedIds, hotspotThreshold, onSelectLocation, onSelectTile }: MapProps) {
+export default function CityMap({ heat, trees, context, air, locations, selectedId, plan, hotspotThreshold, onSelectTile }: MapProps) {
   const container = useRef<HTMLDivElement | null>(null)
   const instance = useRef<L.Map | null>(null)
   const areaBounds = useRef<L.LatLngBounds | null>(null)
+  const thermalBounds = useRef<L.LatLngBounds | null>(null)
+  const treeMarkers = useRef(new Map<string, L.Marker>())
+  const treeCloseButton = useRef<HTMLButtonElement | null>(null)
+  const [treeSelection, setTreeSelection] = useState<TreeSelection | null>(null)
+  const [cardPosition, setCardPosition] = useState<CardPosition | null>(null)
   const [showHeat, setShowHeat] = useState(true)
   const [showCanopy, setShowCanopy] = useState(false)
   const [showPlantings, setShowPlantings] = useState(false)
@@ -78,6 +96,14 @@ export default function CityMap({ heat, trees, context, air, locations, selected
   const [tilesAvailable, setTilesAvailable] = useState(true)
   const [scale, setScale] = useState({ label: "1 km", width: 95 })
   const breaks = useMemo(() => heatThresholds(heat?.features.flatMap((feature) => temperatureOf(feature) ?? []) ?? [], hotspotThreshold), [heat, hotspotThreshold])
+  const plannedLocations = useMemo(() => {
+    const ids = new Set(plan?.selected.map((row) => row.location_id))
+    return locations.filter((location) => ids.has(location.id))
+  }, [locations, plan])
+  const activeTree = treeSelection?.plan === plan
+    ? plannedLocations.find((location) => location.id === treeSelection.id) ?? null
+    : null
+  const cardVisible = cardPosition !== null
 
   useEffect(() => {
     if (!container.current) return
@@ -114,6 +140,8 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     }
     updateScale()
     map.on("zoomend", updateScale)
+    const dismissTree = () => setTreeSelection(null)
+    map.on("click popupopen", dismissTree)
     const resize = new ResizeObserver(() => map.invalidateSize({ pan: false }))
     resize.observe(container.current)
     return () => {
@@ -121,6 +149,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       map.remove()
       instance.current = null
       areaBounds.current = null
+      thermalBounds.current = null
     }
   }, [])
 
@@ -151,10 +180,18 @@ export default function CityMap({ heat, trees, context, air, locations, selected
         }
       },
     }).addTo(map)
-    const bounds = shapes.getBounds()
+    const bounds = L.latLngBounds([])
+    shapes.eachLayer((shape) => {
+      if ("feature" in shape && "getBounds" in shape && typeof shape.getBounds === "function") {
+        const feature = shape.feature as Feature
+        if (feature.properties?.kind === "district" || feature.properties?.kind === "boundary" || feature.properties?.boundary) {
+          bounds.extend(shape.getBounds())
+        }
+      }
+    })
     if (bounds.isValid() && !areaBounds.current) {
       areaBounds.current = bounds
-      map.fitBounds(bounds, { maxZoom: 14, padding: [22, 38] })
+      fitCity(map, bounds)
     }
     return () => { shapes.remove() }
   }, [context, showSchools])
@@ -198,6 +235,10 @@ export default function CityMap({ heat, trees, context, air, locations, selected
         if (value !== null) shape.bindTooltip(tooltip(temperature(value)), { sticky: true, direction: "top" })
       },
     }).addTo(map)
+    if (!thermalBounds.current && layer.getBounds().isValid()) {
+      thermalBounds.current = layer.getBounds()
+      if (!areaBounds.current) fitCity(map, thermalBounds.current)
+    }
     return () => { layer.remove() }
   }, [breaks, heat, onSelectTile, showHeat])
 
@@ -226,32 +267,94 @@ export default function CityMap({ heat, trees, context, air, locations, selected
 
   useEffect(() => {
     const map = instance.current
-    if (!map) return
+    setTreeSelection(null)
+    if (!map || !plan) return
+    fitCity(map, areaBounds.current ?? thermalBounds.current)
     const markers = L.layerGroup().addTo(map)
-    for (const location of locations) {
-      const planned = plannedIds.includes(location.id)
-      const selected = location.id === selectedId
+    const byId = new Map<string, L.Marker>()
+    const icon = L.divIcon({
+      html: treeGlyph,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+      className: styles.treePin,
+    })
+    for (const location of plannedLocations) {
       const priority = location.priority_band === "high"
-      const icon = L.divIcon({
-        html: markerPin,
-        iconSize: [23, 27],
-        iconAnchor: [11, 26],
-        tooltipAnchor: [0, -23],
-        className: `site-pin ${priority ? "site-pin--priority" : ""} ${planned ? "site-pin--planned" : ""} ${selected ? "site-pin--selected" : ""}`,
-      })
+      const label = `Πρόταση για ${location.name}`
       const marker = L.marker([location.latitude, location.longitude], {
-        title: location.name,
-        alt: location.name,
+        title: label,
         icon,
-        zIndexOffset: selected ? 1000 : planned ? 100 : 0,
+        riseOnHover: true,
+        zIndexOffset: priority ? 300 : 200,
       }).addTo(markers)
-      const markerLabel = priority ? `${location.name} · Υψηλή προτεραιότητα` : location.name
-      marker.getElement()?.setAttribute("aria-label", markerLabel)
-      marker.bindTooltip(tooltip(markerLabel), { direction: "top" })
-      marker.on("click", () => onSelectLocation(location.id))
+      const element = marker.getElement()
+      element?.setAttribute("aria-label", label)
+      element?.setAttribute("aria-expanded", "false")
+      element?.setAttribute("data-tree-location", location.id)
+      marker.on("click", () => setTreeSelection((previous) => (
+        previous?.plan === plan && previous.id === location.id ? null : { id: location.id, plan }
+      )))
+      element?.addEventListener("keydown", (event) => {
+        if (event.key !== " ") return
+        event.preventDefault()
+        event.stopPropagation()
+        marker.fire("click")
+      })
+      byId.set(location.id, marker)
     }
-    return () => { markers.remove() }
-  }, [locations, onSelectLocation, plannedIds, selectedId])
+    treeMarkers.current = byId
+    return () => {
+      markers.remove()
+      treeMarkers.current = new Map()
+    }
+  }, [plan, plannedLocations])
+
+  useEffect(() => {
+    for (const [id, marker] of treeMarkers.current) {
+      marker.getElement()?.setAttribute("aria-expanded", String(id === activeTree?.id))
+    }
+  }, [activeTree, plan])
+
+  useEffect(() => {
+    const map = instance.current
+    if (!map || !activeTree) return
+    const coordinates: L.LatLngExpression = [activeTree.latitude, activeTree.longitude]
+    const size = map.getSize()
+    const point = map.latLngToContainerPoint(coordinates)
+    const width = treeCardWidth(size.x)
+    const minX = 12 + width / 2
+    const maxX = size.x - minX
+    const maxY = size.y - Math.min(350, size.y - 50) - 28
+    const offset = point.subtract(L.point(
+      Math.max(minX, Math.min(maxX, point.x)),
+      Math.max(36, Math.min(maxY, point.y)),
+    ))
+    if (offset.x || offset.y) map.panBy(offset, { animate: false })
+
+    const update = () => {
+      const currentSize = map.getSize()
+      const pin = map.latLngToContainerPoint(coordinates)
+      const cardWidth = treeCardWidth(currentSize.x)
+      const left = Math.max(12, Math.min(currentSize.x - 12 - cardWidth, pin.x - cardWidth / 2))
+      const top = pin.y + 23
+      if (pin.x < 0 || pin.x > currentSize.x || pin.y < 0 || top > currentSize.y - 75) {
+        setCardPosition(null)
+        return
+      }
+      setCardPosition({
+        left, top, width: cardWidth, height: currentSize.y - top - 28,
+        anchor: Math.max(9, Math.min(cardWidth - 9, pin.x - left)),
+      })
+    }
+    update()
+    map.on("move zoom resize", update)
+    return () => { map.off("move zoom resize", update) }
+  }, [activeTree])
+
+  useEffect(() => {
+    if (activeTree && cardVisible) treeCloseButton.current?.focus({ preventScroll: true })
+    // The initial placement shows the close control. Subsequent map moves preserve focus.
+  }, [activeTree, cardVisible])
 
   useEffect(() => {
     const map = instance.current
@@ -279,24 +382,48 @@ export default function CityMap({ heat, trees, context, air, locations, selected
 
   useEffect(() => {
     const map = instance.current
+    if (!map || !selectedId) return
     const selected = locations.find((location) => location.id === selectedId)
-    if (map && selected) {
-      const point: L.LatLngExpression = [selected.latitude, selected.longitude]
-      if (!map.getBounds().pad(-0.15).contains(point)) map.panTo(point)
+    if (!selected) return
+    const point: L.LatLngExpression = [selected.latitude, selected.longitude]
+    if (plan && treeMarkers.current.has(selectedId)) {
+      setTreeSelection({ id: selectedId, plan })
+    } else if (!map.getBounds().pad(-0.15).contains(point)) {
+      map.panTo(point)
     }
-  }, [locations, selectedId])
+  }, [locations, selectedId, plan])
 
   const resetToCity = () => {
-    if (areaBounds.current) {
-      instance.current?.fitBounds(areaBounds.current, { maxZoom: 14, padding: [22, 38] })
-    } else {
-      instance.current?.setView(cityCenter, cityZoom)
-    }
+    setTreeSelection(null)
+    if (instance.current) fitCity(instance.current, areaBounds.current ?? thermalBounds.current)
+  }
+
+  const closeTree = () => {
+    setTreeSelection(null)
+    if (activeTree) treeMarkers.current.get(activeTree.id)?.getElement()?.focus({ preventScroll: true })
   }
 
   return (
     <div className="map-frame">
-      <div className="map-canvas" ref={container} aria-label="Διαδραστικός χάρτης της Αθήνας" />
+      <div className={`map-canvas ${styles.mapCanvas}`} ref={container} aria-label="Διαδραστικός χάρτης της Αθήνας" />
+      {plan && activeTree && cardPosition && (
+        <div
+          className={styles.treePopup}
+          data-tree-popup={activeTree.id}
+          role="dialog"
+          aria-label={`Παρέμβαση · ${activeTree.name}`}
+          style={{ left: cardPosition.left, top: cardPosition.top, width: cardPosition.width }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") closeTree()
+          }}
+        >
+          <span className={styles.treePopupArrow} style={{ left: cardPosition.anchor }} aria-hidden="true" />
+          <button className={styles.treePopupClose} type="button" aria-label="Κλείσιμο κάρτας παρέμβασης" ref={treeCloseButton} onClick={closeTree}><X size={16} /></button>
+          <div className={styles.treePopupScroll} style={{ maxHeight: cardPosition.height }} tabIndex={0}>
+            <TreePopupCard key={activeTree.id} location={activeTree} plan={plan} />
+          </div>
+        </div>
+      )}
       <div className="map-tools">
         <button type="button" aria-label="Εστίαση προς τα μέσα" onClick={() => instance.current?.zoomIn()}><Plus size={18} /></button>
         <button type="button" aria-label="Εστίαση προς τα έξω" onClick={() => instance.current?.zoomOut()}><Minus size={18} /></button>
@@ -333,15 +460,13 @@ export default function CityMap({ heat, trees, context, air, locations, selected
             </div>
           </div>
         )}
-        <div className="legend-features">
+        <div className={`legend-features ${styles.legendFeatures}`}>
           {showAir && !!air?.readings.length && <span><i className="legend-swatch legend-swatch--air" /> Θερμοκρασία αέρα</span>}
           {showCanopy && <span><i className="legend-swatch legend-swatch--trees" /> Δενδροκάλυψη</span>}
           {showPlantings && <span><i className="legend-swatch legend-swatch--planting" /> Καταγραφές φύτευσης</span>}
           {showParks && <span><i className="legend-swatch legend-swatch--park" /> Πάρκο τσέπης</span>}
           {showSchools && <span><i className="legend-swatch legend-swatch--schools" /> Δημόσια σχολεία</span>}
-          <span><i className="legend-swatch legend-swatch--candidate" /> Υποψήφια θέση</span>
-          {locations.some((location) => location.priority_band === "high") && <span><i className="legend-swatch legend-swatch--priority" /> Υψηλή προτεραιότητα</span>}
-          {plannedIds.length > 0 && <span><i className="legend-swatch legend-swatch--plan" /> Θέση στο πλάνο</span>}
+          {plannedLocations.length > 0 && <span><TreeDeciduous className={styles.legendTree} size={14} aria-hidden="true" /> Θέση στο πλάνο</span>}
         </div>
       </div>
       <div className="map-scale" aria-hidden="true"><span>{scale.label}</span><i style={{ width: scale.width }} /></div>

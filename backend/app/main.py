@@ -29,6 +29,7 @@ from .models import (
     SourcesResponse,
 )
 from .optimizer import OptimizationError, optimize
+from .plan_card import LocalPlanCardEditor, PlanCard
 from .semantic import ModelUnavailable, SemanticResult, keyword_search, semantic_search
 
 DEFAULT_DATASET_PATH = Path(__file__).resolve().parents[2] / "data" / "processed" / "athens.json"
@@ -73,6 +74,7 @@ def create_app(dataset_path: Path | None = None) -> FastAPI:
     api = APIRouter(prefix="/api")
     air_feed = AirFeed()
     brief_editor = BriefEditor(os.getenv("GROQ_API_KEY"))
+    card_editor = LocalPlanCardEditor()
 
     def dataset_analysis() -> AthensAnalysis:
         try:
@@ -148,6 +150,19 @@ def create_app(dataset_path: Path | None = None) -> FastAPI:
     @api.post("/optimize", tags=["Planning"])
     def plan(request: OptimizeRequest, analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)]) -> Plan:
         return get_plan(analysis, request)
+
+    @api.post("/locations/{location_id}/plan-card", tags=["Planning"])
+    def plan_card(
+        location_id: str, request: OptimizeRequest, analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)],
+    ) -> PlanCard:
+        site = analysis.locations.get(location_id)
+        if site is None:
+            raise HTTPException(status_code=404, detail="Το σημείο δεν βρέθηκε.")
+        plan = get_plan(analysis, request)
+        selected = [item for item in plan.selected if item.location_id == location_id]
+        if not selected:
+            raise HTTPException(status_code=422, detail="Η θέση δεν περιλαμβάνεται στο υπολογισμένο πλάνο.")
+        return card_editor.build(site, selected, plan.strategy)
 
     @api.post("/ai-brief", tags=["Planning"])
     def city_brief(

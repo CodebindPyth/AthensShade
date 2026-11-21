@@ -11,7 +11,6 @@ import styles from "./investment-panel.module.css"
 type InvestmentPanelProps = {
   plan: Plan | null
   isStale?: boolean
-  locations?: Map<string, Location>
   comparison?: Comparison | null
 }
 
@@ -42,14 +41,32 @@ const exampleInputs = {
   "discount-rate": "3",
 }
 
-export function InvestmentPanel({ plan, isStale = false, locations, comparison }: InvestmentPanelProps) {
+export function CoolingEstimates({ plan, isStale = false, locations }: Pick<InvestmentPanelProps, "plan" | "isStale"> & { locations: Map<string, Location> }) {
+  const activePlan = plan && !isStale && plan.selected.length > 0 ? plan : null
+  return (
+    <section id="cooling-estimates" className={`panel ${styles.panel}`} aria-labelledby="cooling-heading">
+      <header className={styles.heading}>
+        <h2 id="cooling-heading">Εκτίμηση ψύξης</h2>
+        <Thermometer size={20} aria-hidden="true" />
+      </header>
+      {activePlan?.thermal_impact?.length ? (
+        <ul className={styles.impactRows}>
+          {activePlan.thermal_impact.map((item) => <ThermalRow key={item.type} item={item} locations={locations} />)}
+        </ul>
+      ) : <p className={styles.empty}>Υπολόγισε ένα πλάνο για να δεις τα διαθέσιμα θερμικά σενάρια.</p>}
+      <a className={styles.measurementLink} href="#microclimate-monitor">Αποτίμηση με μετρήσεις πριν και μετά</a>
+    </section>
+  )
+}
+
+export function InvestmentPanel({ plan, isStale = false, comparison }: InvestmentPanelProps) {
   const activePlan = plan && !isStale && plan.selected.length > 0 ? plan : null
   const comparable = activePlan && comparison && sameScenario(activePlan, comparison.proposed) ? comparison : null
 
   return (
     <section id="investment-appraisal" className={`panel ${styles.panel}`} aria-labelledby="investment-heading">
       <header className={styles.heading}>
-        <h2 id="investment-heading">Εκτίμηση ψύξης και απόσβεσης</h2>
+        <h2 id="investment-heading">Εκτίμηση απόσβεσης</h2>
         {activePlan && (
           <p className={styles.cost}>
             <span>Αρχικό κόστος πλάνου</span>
@@ -58,30 +75,19 @@ export function InvestmentPanel({ plan, isStale = false, locations, comparison }
         )}
       </header>
       {activePlan ? (
-        <div className={styles.columns}>
-          <div className={styles.thermal}>
-            <h3 className={styles.subheading}><Thermometer size={17} aria-hidden="true" /> Θερμικός αντίκτυπος</h3>
-            {activePlan.thermal_impact?.length ? (
-              <ul className={styles.impactRows}>
-                {activePlan.thermal_impact.map((item) => <ThermalRow key={item.type} item={item} locations={locations} />)}
-              </ul>
-            ) : (
-              <p className={styles.note}>Η εκτίμηση ψύξης είναι διαθέσιμη για παρεμβάσεις με σχετικά δεδομένα.</p>
-            )}
-            <a className={styles.measurementLink} href="#microclimate-monitor">Αποτίμηση με μετρήσεις πριν και μετά</a>
-          </div>
+        <div className={styles.sectionBody}>
           <div className={styles.finance}>
             <h3 className={styles.subheading}><Calculator size={17} aria-hidden="true" /> Οικονομική αποτίμηση για τον Δήμο</h3>
             {comparable && <ComparisonCost comparison={comparable} />}
             <FinanceForm
-              key={JSON.stringify([activePlan.dataset_version, activePlan.strategy, activePlan.budget_eur, activePlan.include_inspection, activePlan.total_cost_eur, activePlan.selected.map((item) => item.id)])}
+              key={JSON.stringify([activePlan.dataset_version, activePlan.strategy, activePlan.budget_eur, activePlan.include_inspection, activePlan.priority_only, activePlan.total_cost_eur, activePlan.selected.map((item) => item.id)])}
               plan={activePlan}
             />
           </div>
         </div>
       ) : (
         <p className={styles.empty}>
-          {isStale ? "Υπολόγισε ξανά το πλάνο για να ενημερωθεί η εκτίμηση." : "Υπολόγισε ένα πλάνο με παρεμβάσεις για να εμφανιστούν η εκτίμηση ψύξης και ο υπολογισμός απόσβεσης."}
+          {isStale ? "Υπολόγισε ξανά το πλάνο για να ενημερωθεί η εκτίμηση." : "Υπολόγισε ένα πλάνο με παρεμβάσεις για να δεις την εκτίμηση απόσβεσης."}
         </p>
       )}
     </section>
@@ -92,6 +98,7 @@ function sameScenario(plan: Plan, other: Plan) {
   return plan.dataset_version === other.dataset_version
     && plan.budget_eur === other.budget_eur
     && plan.include_inspection === other.include_inspection
+    && plan.priority_only === other.priority_only
     && plan.strategy === other.strategy
 }
 
@@ -214,6 +221,7 @@ function FinanceForm({ plan }: { plan: Plan }) {
     try {
       const result = await api.appraise({
         budget_eur: plan.budget_eur,
+        priority_only: plan.priority_only,
         include_inspection: plan.include_inspection,
         strategy: plan.strategy,
       }, assumptions, controller.signal, selectedType || undefined)

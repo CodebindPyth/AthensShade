@@ -1,0 +1,84 @@
+.mapCanvas {
+  isolation: isolate;
+}
+
+.mapCanvas .treePin {
+  display: grid;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #176544;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 2px 5px #163c3399;
+}
+
+.mapCanvas .treePin:hover,
+.mapCanvas .treePin[aria-expanded="true"] {
+  background: #104c35;
+  box-shadow: 0 0 0 3px #e9cd7d, 0 2px 7px #163c3377;
+}
+
+.mapCanvas .treePin:focus-visible {
+  outline: 3px solid #143c74;
+  outline-offset: 2px;
+}
+
+.legendTree {
+  color: #176544;
+  flex: 0 0 auto;
+}
+
+.legendFeatures:empty {
+  display: none;
+}
+
+.treePopup {
+  position: absolute;
+  z-index: 560;
+  color: var(--ink);
+  border: 1px solid #c9d8d1;
+  border-radius: 9px;
+  background: var(--paper);
+  box-shadow: 0 8px 24px #1c342c2e;
+}
+
+.treePopupArrow {
+  position: absolute;
+  top: -6px;
+  width: 11px;
+  height: 11px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--paper);
+  border-top: 1px solid #c9d8d1;
+  border-left: 1px solid #c9d8d1;
+  pointer-events: none;
+}
+
+.treePopupClose {
+  position: absolute;
+  z-index: 1;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: #eef5f1;
+  color: #184734;
+  cursor: pointer;
+}
+
+.treePopupClose:hover {
+  background: #e1ede6;
+}
+
+.treePopupScroll {
+  position: relative;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: inherit;
+  padding: 10px;
+}

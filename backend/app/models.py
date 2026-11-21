@@ -224,6 +224,7 @@ class OptimizeRequest(BaseModel):
     budget_eur: Budget
     include_inspection: bool = False
     strategy: PlanStrategy = "balanced"
+    priority_only: bool = False
 
 
 class ThermalImpact(BaseModel):
@@ -251,6 +252,7 @@ class Plan(BaseModel):
     status: PlanStatus
     include_inspection: bool
     strategy: PlanStrategy
+    priority_only: bool = False
     priority_site_count: int
     shade_impact: PlanShadeImpact
     greened_roof_area_m2: float

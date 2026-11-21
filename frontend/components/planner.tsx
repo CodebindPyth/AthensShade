@@ -74,7 +74,7 @@ export function Planner(props: PlannerProps) {
               <div><span>Υπόλοιπο</span><strong className="remaining">{euros(plan.remaining_budget_eur)}</strong></div>
             </div>
             {plan.include_inspection ? (
-              <p className="notice notice--inspection"><CircleAlert size={17} /> Διερευνητικό πλάνο. Οι θέσεις προς αυτοψία χρειάζονται επιτόπια επιβεβαίωση.</p>
+              <p className="notice notice--inspection"><CircleAlert size={17} /> Demo για {euros(plan.budget_eur)}. Οι θέσεις προς αυτοψία χρειάζονται επιτόπια επιβεβαίωση.</p>
             ) : (
               <p className="verified-label"><ShieldCheck size={16} /> Επιβεβαιωμένες θέσεις</p>
             )}
@@ -82,7 +82,8 @@ export function Planner(props: PlannerProps) {
             {plan.selected.length > 0 && !props.isStale && (
               <nav aria-label="Ανάλυση πλάνου" className="plan-detail-links">
                 <a className="impact-evaluation-link" href="#city-brief">Σύνοψη για τον Δήμο ↓</a>
-                <a className="impact-evaluation-link" href="#investment-appraisal">Εκτίμηση ψύξης και απόσβεσης ↓</a>
+                <a className="impact-evaluation-link" href="#cooling-estimates">Εκτίμηση ψύξης ↓</a>
+                <a className="impact-evaluation-link" href="#investment-appraisal">Εκτίμηση απόσβεσης ↓</a>
               </nav>
             )}
             {plan.selected.length === 0 ? (

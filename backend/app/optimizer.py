@@ -27,7 +27,11 @@ def optimize(analysis: AthensAnalysis, request: OptimizeRequest) -> Plan:
         eligible.add("requires_site_inspection")
 
     candidates = sorted(
-        (row for row in analysis.dataset.interventions if row.feasibility in eligible),
+        (
+            row for row in analysis.dataset.interventions
+            if row.feasibility in eligible
+            and (not request.priority_only or analysis.locations[row.location_id].priority_band == "high")
+        ),
         key=lambda row: row.id,
     )
     affordable = [row for row in candidates if row.cost_eur <= request.budget_eur]
@@ -72,6 +76,7 @@ def optimize(analysis: AthensAnalysis, request: OptimizeRequest) -> Plan:
         status=status,
         include_inspection=request.include_inspection,
         strategy=request.strategy,
+        priority_only=request.priority_only,
         priority_site_count=sum(row.priority_band == "high" for row in picks),
         shade_impact=summarize_shade(picks),
         greened_roof_area_m2=round(sum(row.greened_roof_area_m2 or 0 for row in picks), 2),

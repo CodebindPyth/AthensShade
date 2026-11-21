@@ -63,7 +63,7 @@ export type AirReading = {
 export type AirObservations = { readings: AirReading[]; source_url: string; registry_url: string }
 export type Analysis = { location: Location; interventions: Intervention[]; explanation: string }
 export type Strategy = "balanced" | "immediate_shade"
-export type Scenario = { budget_eur: number; include_inspection: boolean; strategy: Strategy }
+export type Scenario = { budget_eur: number; include_inspection: boolean; strategy: Strategy; priority_only?: boolean }
 export type ShadeRange = { min_m2: number; max_m2: number }
 export type ShadeImpact = {
   after_installation: ShadeRange
@@ -129,6 +129,15 @@ export type FinancialAppraisal = {
   required_annual_savings_eur: number | null
   sensitivity: { change_pct: number; annual_savings_eur: number; npv_eur: number }[]
 }
+export type SiteCardResponse = {
+  source: "local_model" | "verified_template"
+  model: string | null
+  explanation: string
+  assumptions: Pick<FinancialAssumptions, "annual_savings_eur" | "annual_maintenance_eur" | "horizon_years" | "discount_rate_pct" | "savings_delay_years"> | null
+  simple_payback_year: number | null
+  discounted_payback_year: number | null
+  required_annual_savings_eur: number | null
+}
 
 export type LayerName = "heat" | "trees" | "context"
 export type Layers = Record<LayerName, FeatureCollection>
@@ -140,6 +149,8 @@ export const api = {
   layer: (layer: LayerName, signal?: AbortSignal) => request<FeatureCollection>(`/layers/${layer}`, { signal }),
   analysis: (id: string, signal?: AbortSignal) => request<Analysis>(`/locations/${encodeURIComponent(id)}/analysis`, { signal }),
   optimize: (scenario: Scenario, signal?: AbortSignal) => post<Plan>("/optimize", scenario, signal),
+  siteCard: (id: string, scenario: Scenario, signal?: AbortSignal) =>
+    post<SiteCardResponse>(`/locations/${encodeURIComponent(id)}/plan-card`, scenario, signal),
   aiBrief: (scenario: Scenario, signal?: AbortSignal) => post<AiBriefResponse>("/ai-brief", scenario, signal),
   searchEvidence: (query: string, signal?: AbortSignal) =>
     post<EvidenceSearchResponse>("/evidence-search", { query }, signal),

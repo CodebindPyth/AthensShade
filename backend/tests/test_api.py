@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -155,6 +156,91 @@ def test_optimizer_prioritizes_hot_deficit_before_modeled_benefit(client: TestCl
     assert plan["total_cost_eur"] == 48_000
     assert plan["remaining_budget_eur"] == 2_000
     assert [row["id"] for row in plan["selected"]] == ["shade-a"]
+
+
+def test_plan_card_contains_site_finances_without_model(data: dict, tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ATHENSSHADE_LOCAL_ENGINE", "disabled")
+    data["interventions"][1]["cost_eur"] = 10_000
+    client = app_for(data, tmp_path)
+    request = {"budget_eur": 50_000, "strategy": "immediate_shade"}
+    response = client.post("/api/locations/hot-a/plan-card", json=request)
+    assert response.status_code == 200
+    card = response.json()
+    assert card["source"] == "verified_template"
+    assert card["model"] is None
+    assert "hot-a" in card["explanation"]
+    assert card["assumptions"] == {
+        "annual_savings_eur": 2000.0, "annual_maintenance_eur": 200.0, "horizon_years": 20,
+        "discount_rate_pct": 3.0, "savings_delay_years": 0,
+    }
+    assert card["simple_payback_year"] == 6
+    assert card["discounted_payback_year"] == 7
+    assert card["required_annual_savings_eur"] > card["assumptions"]["annual_maintenance_eur"]
+    assert client.post("/api/locations/hot-b/plan-card", json=request).status_code == 422
+    assert client.post("/api/locations/unknown-id/plan-card", json=request).status_code == 404
+    assert client.post("/api/locations/hot-a/plan-card", json={**request, "annual_savings_eur": 999}).status_code == 422
+
+
+def test_plan_card_uses_same_priority_filter_as_its_scenario(data: dict, tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ATHENSSHADE_LOCAL_ENGINE", "disabled")
+    data["interventions"] = [item for item in data["interventions"] if item["location_id"] == "cool"]
+    client = app_for(data, tmp_path)
+    path = "/api/locations/cool/plan-card"
+    request = {"budget_eur": 30_000}
+    assert client.post(path, json=request).status_code == 200
+    assert client.post(path, json={**request, "priority_only": True}).status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("engine", "port", "endpoint", "result"),
+    [
+        ("ollama", "11434", "/api/generate", {"response": '{"focus":"maintenance"}'}),
+        ("llama_cpp", "8080", "/v1/chat/completions",
+         {"choices": [{"message": {"content": '{"focus":"maintenance"}'}}]}),
+    ],
+)
+def test_plan_card_uses_only_validated_local_guidance(
+    data: dict, tmp_path: Path, monkeypatch, engine: str, port: str, endpoint: str, result: dict,
+) -> None:
+    monkeypatch.setenv("ATHENSSHADE_LOCAL_ENGINE", engine)
+    monkeypatch.delenv("ATHENSSHADE_LOCAL_PORT", raising=False)
+    monkeypatch.setenv("ATHENSSHADE_LOCAL_MODEL", "test-model")
+    requests = []
+
+    def local_provider(url, *, json, timeout, trust_env, follow_redirects):
+        requests.append(json)
+        assert url == f"http://127.0.0.1:{port}{endpoint}"
+        assert not trust_env
+        assert not follow_redirects
+        return httpx.Response(200, json=result, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr("app.plan_card.httpx.post", local_provider)
+    client = app_for(data, tmp_path)
+    path = "/api/locations/hot-a/plan-card"
+    request = {"budget_eur": 50_000}
+    card = client.post(path, json=request).json()
+    assert card["source"] == "local_model"
+    assert card["model"] == "test-model"
+    assert "αντικατάστασης του σκιάστρου" in card["explanation"]
+    assert card["assumptions"]["annual_maintenance_eur"] == 960
+    assert card["simple_payback_year"] is None
+    assert client.post(path, json=request).json() == card
+    assert len(requests) == 1
+
+
+def test_plan_card_uses_template_on_out_of_scope_model_answer(data: dict, tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ATHENSSHADE_LOCAL_ENGINE", "ollama")
+
+    def model_response(url, **kwargs):
+        return httpx.Response(
+            200, json={"response": '{"focus":"unknown","annual_savings_eur":999999}'},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr("app.plan_card.httpx.post", model_response)
+    card = app_for(data, tmp_path).post("/api/locations/hot-a/plan-card", json={"budget_eur": 50_000}).json()
+    assert card["source"] == "verified_template"
+    assert card["assumptions"]["annual_savings_eur"] == 2000
 
 
 def test_budget_and_inspection_comparison(client: TestClient) -> None:
