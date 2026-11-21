@@ -26,6 +26,7 @@ type MapProps = {
 const cityCenter: L.LatLngExpression = [37.991, 23.731]
 const cityZoom = 12
 const treeGlyph = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5m0 0 3.5-3.5M12 17l-2.5-2.5M7 17a4 4 0 0 1-1.3-7.8A5.8 5.8 0 0 1 11.5 3a6 6 0 0 1 5.8 4.4A4.9 4.9 0 0 1 16 17h-1"/></svg>'
+const minimumTreeDistance = 36
 
 type TreeSelection = { id: string; plan: Plan }
 type CardPosition = { left: number; top: number; width: number; height: number; anchor: number }
@@ -271,6 +272,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     if (!map || !plan) return
     fitCity(map, areaBounds.current ?? thermalBounds.current)
     const markers = L.layerGroup().addTo(map)
+    const connectors = L.layerGroup().addTo(map)
     const byId = new Map<string, L.Marker>()
     const icon = L.divIcon({
       html: treeGlyph,
@@ -302,8 +304,36 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       })
       byId.set(location.id, marker)
     }
+    const separatePins = () => {
+      connectors.clearLayers()
+      const occupied: L.Point[] = []
+      for (const location of plannedLocations) {
+        const actual = L.latLng(location.latitude, location.longitude)
+        const origin = map.project(actual)
+        let position = origin
+        let ring = 0
+        while (occupied.some((other) => other.distanceTo(position) < minimumTreeDistance)) {
+          ring += 1
+          const radius = minimumTreeDistance * Math.ceil(ring / 8)
+          const angle = ((ring - 1) % 8) * Math.PI / 4
+          position = origin.add(L.point(Math.cos(angle) * radius, Math.sin(angle) * radius))
+        }
+        occupied.push(position)
+        const anchor = position.equals(origin) ? actual : map.unproject(position)
+        byId.get(location.id)?.setLatLng(anchor)
+        if (!anchor.equals(actual)) {
+          L.polyline([actual, anchor], {
+            color: "#176544", weight: 1.5, opacity: 0.78, interactive: false,
+          }).addTo(connectors)
+        }
+      }
+    }
+    separatePins()
+    map.on("zoomend", separatePins)
     treeMarkers.current = byId
     return () => {
+      map.off("zoomend", separatePins)
+      connectors.remove()
       markers.remove()
       treeMarkers.current = new Map()
     }
@@ -318,9 +348,9 @@ export default function CityMap({ heat, trees, context, air, locations, selected
   useEffect(() => {
     const map = instance.current
     if (!map || !activeTree) return
-    const coordinates: L.LatLngExpression = [activeTree.latitude, activeTree.longitude]
+    const coordinates = () => treeMarkers.current.get(activeTree.id)?.getLatLng() ?? L.latLng(activeTree.latitude, activeTree.longitude)
     const size = map.getSize()
-    const point = map.latLngToContainerPoint(coordinates)
+    const point = map.latLngToContainerPoint(coordinates())
     const width = treeCardWidth(size.x)
     const minX = 12 + width / 2
     const maxX = size.x - minX
@@ -333,7 +363,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
 
     const update = () => {
       const currentSize = map.getSize()
-      const pin = map.latLngToContainerPoint(coordinates)
+      const pin = map.latLngToContainerPoint(coordinates())
       const cardWidth = treeCardWidth(currentSize.x)
       const left = Math.max(12, Math.min(currentSize.x - 12 - cardWidth, pin.x - cardWidth / 2))
       const top = pin.y + 23
@@ -347,8 +377,8 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       })
     }
     update()
-    map.on("move zoom resize", update)
-    return () => { map.off("move zoom resize", update) }
+    map.on("move zoom zoomend resize", update)
+    return () => { map.off("move zoom zoomend resize", update) }
   }, [activeTree])
 
   useEffect(() => {
