@@ -1,13 +1,27 @@
-import { House, TreeDeciduous, Umbrella } from "lucide-react"
-import type { Plan, ShadeRange } from "../lib/api"
-import { shadeArea } from "../lib/format"
+import { Armchair, House, TreeDeciduous, Umbrella } from "lucide-react"
+import type { Intervention, Plan, ShadeRange } from "../lib/api"
+import { euros, numeric, shadeArea } from "../lib/format"
 import styles from "./plan-impact.module.css"
 
 const metrics = [
-  { id: "installed", label: "Σκιά μετά την εγκατάσταση", icon: Umbrella, interventionType: "shade_structure" },
-  { id: "mature", label: "Σκιά από ώριμα δέντρα", icon: TreeDeciduous, interventionType: "tree_planting" },
-  { id: "roof", label: "Επιφάνεια φυτεμένων δωμάτων", icon: House, interventionType: "green_roof" },
+  { id: "installed", label: "Σκιά μετά την εγκατάσταση", icon: Umbrella, interventionTypes: ["shade_structure", "shaded_bench"] },
+  { id: "mature", label: "Σκιά από ώριμα δέντρα", icon: TreeDeciduous, interventionTypes: ["tree_planting"] },
+  { id: "roof", label: "Επιφάνεια φυτεμένων δωμάτων", icon: House, interventionTypes: ["green_roof"] },
 ] as const
+
+const unitTypes = [
+  { id: "tree_planting", label: "Δέντρα", icon: TreeDeciduous },
+  { id: "shade_structure", label: "Αυτόνομα σκίαστρα", icon: Umbrella },
+  { id: "shaded_bench", label: "Σκιασμένα παγκάκια", icon: Armchair },
+] as const
+
+function unitLabel(items: Intervention[], type: string) {
+  const relevant = items.filter((item) => item.type === type)
+  const reported = relevant.flatMap((item) => item.shade_impact?.unit_count ?? [])
+  const known = reported.reduce((sum, count) => sum + count, 0)
+  if (relevant.length === reported.length) return numeric(known)
+  return reported.length ? `≥${numeric(known)}` : "Άγνωστο"
+}
 
 function getPlanImpact(plan: Plan) {
   const roof = plan.greened_roof_area_m2
@@ -17,7 +31,7 @@ function getPlanImpact(plan: Plan) {
     roof: roof == null ? undefined : { min_m2: roof, max_m2: roof },
   }
   return metrics.map((metric) => {
-    const relevant = plan.selected.filter((item) => item.type === metric.interventionType)
+    const relevant = plan.selected.filter((item) => metric.interventionTypes.some((type) => type === item.type))
     const missingCount = relevant.filter((item) => (
       metric.id === "roof" ? item.greened_roof_area_m2 == null : item.shade_impact == null
     )).length
@@ -35,24 +49,42 @@ function areaLabel(range: ShadeRange | undefined) {
 export function ImpactCard({ plan }: { plan: Plan }) {
   const rows = getPlanImpact(plan)
   const missingCount = rows.reduce((total, row) => total + row.missingCount, 0)
+  const roof = rows.find((row) => row.id === "roof")
   return (
-    <section className={`shade-impact ${styles.summary}`} aria-label="Εκτίμηση σκίασης και πρασίνου">
-      <h3>Εκτίμηση σκίασης και πρασίνου</h3>
-      <dl className={styles.metrics}>
-        {rows.map(({ id, label, icon: Icon, range }) => (
-          <div key={id} className={styles.metric}>
-            <dt><Icon size={16} aria-hidden="true" />{label}</dt>
-            <dd>{areaLabel(range)}</dd>
+    <>
+      <section className={styles.quantities} aria-label="Σύνολο παρεμβάσεων για τον προϋπολογισμό">
+        <h3>Σύνολο πλάνου για {euros(plan.budget_eur)}</h3>
+        <dl>
+          {unitTypes.map(({ id, label, icon: Icon }) => (
+            <div key={id}>
+              <dt><Icon size={15} aria-hidden="true" />{label}</dt>
+              <dd>{unitLabel(plan.selected, id)}</dd>
+            </div>
+          ))}
+          <div>
+            <dt><House size={15} aria-hidden="true" />Φυτεμένα δώματα</dt>
+            <dd>{areaLabel(roof?.range)}</dd>
           </div>
-        ))}
-      </dl>
-      <p className={styles.caption}>Οι επιφάνειες σκιάς είναι ενδεικτικές, πριν από πιθανές επικαλύψεις.</p>
-      {missingCount > 0 && <p className={styles.caption}>Παρεμβάσεις χωρίς εκτίμηση επιφάνειας · {missingCount}</p>}
-      <p className={styles.caption}>
-        Η μεταβολή θερμοκρασίας προκύπτει από{" "}
-        <a href="#microclimate-monitor">μετρήσεις πριν και μετά</a>.
-      </p>
-    </section>
+        </dl>
+      </section>
+      <section className={`shade-impact ${styles.summary}`} aria-label="Εκτίμηση σκίασης και πρασίνου">
+        <h3>Εκτίμηση σκίασης και πρασίνου</h3>
+        <dl className={styles.metrics}>
+          {rows.filter(({ id }) => id !== "roof").map(({ id, label, icon: Icon, range }) => (
+            <div key={id} className={styles.metric}>
+              <dt><Icon size={16} aria-hidden="true" />{label}</dt>
+              <dd>{areaLabel(range)}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className={styles.caption}>Οι επιφάνειες σκιάς είναι ενδεικτικές, πριν από πιθανές επικαλύψεις.</p>
+        {missingCount > 0 && <p className={styles.caption}>Παρεμβάσεις χωρίς εκτίμηση επιφάνειας · {missingCount}</p>}
+        <p className={styles.caption}>
+          Η μεταβολή θερμοκρασίας προκύπτει από{" "}
+          <a href="#microclimate-monitor">μετρήσεις πριν και μετά</a>.
+        </p>
+      </section>
+    </>
   )
 }
 

@@ -53,9 +53,10 @@ export function Planner(props: PlannerProps) {
         </div>
         <div className="strategy-field">
           <label htmlFor="plan-strategy">Στόχος σχεδίου</label>
-          <select id="plan-strategy" value={props.strategy} onChange={(event) => props.setStrategy(event.target.value === "immediate_shade" ? "immediate_shade" : "balanced")}>
+          <select id="plan-strategy" value={props.strategy} onChange={(event) => props.setStrategy(event.target.value as Strategy)}>
             <option value="balanced">Ισορροπημένο πλάνο</option>
             <option value="immediate_shade">Άμεση σκίαση</option>
+            <option value="shade_and_rest">Σκίαση και ξεκούραση</option>
           </select>
         </div>
         <label className="inspection-check">

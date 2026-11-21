@@ -40,6 +40,14 @@ const exampleInputs = {
   "annual-maintenance": "2000",
   "discount-rate": "3",
 }
+const coverageAssumptions = {
+  annual_savings_eur: 0,
+  annual_maintenance_eur: 0,
+  horizon_years: 20,
+  discount_rate_pct: 3,
+  savings_delay_years: 0,
+  grant_eur: 0,
+}
 
 export function CoolingEstimates({ plan, isStale = false, locations }: Pick<InvestmentPanelProps, "plan" | "isStale"> & { locations: Map<string, Location> }) {
   const activePlan = plan && !isStale && plan.selected.length > 0 ? plan : null
@@ -79,6 +87,7 @@ export function InvestmentPanel({ plan, isStale = false, comparison }: Investmen
           <div className={styles.finance}>
             <h3 className={styles.subheading}><Calculator size={17} aria-hidden="true" /> Οικονομική αποτίμηση για τον Δήμο</h3>
             {comparable && <ComparisonCost comparison={comparable} />}
+            <FundingThreshold plan={activePlan} />
             <FinanceForm
               key={JSON.stringify([activePlan.dataset_version, activePlan.strategy, activePlan.budget_eur, activePlan.include_inspection, activePlan.priority_only, activePlan.total_cost_eur, activePlan.selected.map((item) => item.id)])}
               plan={activePlan}
@@ -90,6 +99,42 @@ export function InvestmentPanel({ plan, isStale = false, comparison }: Investmen
           {isStale ? "Υπολόγισε ξανά το πλάνο για να ενημερωθεί η εκτίμηση." : "Υπολόγισε ένα πλάνο με παρεμβάσεις για να δεις την εκτίμηση απόσβεσης."}
         </p>
       )}
+    </section>
+  )
+}
+
+function FundingThreshold({ plan }: { plan: Plan }) {
+  const { budget_eur, include_inspection, priority_only, strategy } = plan
+  const [threshold, setThreshold] = useState<number | null>(null)
+  const [unavailable, setUnavailable] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setThreshold(null)
+    setUnavailable(false)
+    api.appraise({ budget_eur, include_inspection, priority_only, strategy }, coverageAssumptions, controller.signal)
+      .then((result) => { if (!controller.signal.aborted) setThreshold(result.required_annual_savings_eur) })
+      .catch(() => { if (!controller.signal.aborted) setUnavailable(true) })
+    return () => controller.abort()
+  }, [budget_eur, include_inspection, priority_only, strategy])
+
+  return (
+    <section className={styles.funding} aria-label="Όριο οικονομικής κάλυψης">
+      <strong>Όριο οικονομικής κάλυψης</strong>
+      <p aria-live="polite">
+        {threshold !== null
+          ? <>Το πλάνο χρειάζεται τουλάχιστον <strong>{euros(threshold)} τον χρόνο</strong> σε εξοικονομήσεις για να καλύψει την αρχική επένδυση.</>
+          : unavailable ? "Ο αυτόματος υπολογισμός δεν είναι διαθέσιμος." : "Υπολογισμός ελάχιστης ετήσιας εξοικονόμησης…"}
+      </p>
+      <p className={styles.note}>Ορίζοντας 20 έτη · προεξόφληση 3% · 0 € συντήρηση και επιχορήγηση. Συμπλήρωσε τα πραγματικά ποσά παρακάτω για πλήρη αποτίμηση.</p>
+      <details className={styles.fundingDetails}>
+        <summary>Πώς μπορεί να αποσβεστεί</summary>
+        <ul>
+          <li><strong>Φυτεμένα δώματα:</strong> μέτρησε τις kWh που εξοικονομήθηκαν σε συγκρίσιμες συνθήκες και πολλαπλασίασε με τη μεταβλητή χρέωση. Πρόσθεσε το κόστος άρδευσης και συντήρησης στο αντίστοιχο πεδίο.</li>
+          <li><strong>Σκίαστρα και παγκάκια:</strong> σύγκρινε κόστος ανά m² άμεσης σκιάς και ανά σκιασμένη θέση ανάπαυσης. Στις εξοικονομήσεις καταχώρισε μόνο τεκμηριωμένες δαπάνες που αποφεύγει ο Δήμος.</li>
+          <li><strong>Επιχορήγηση:</strong> καταχώρισε το επιβεβαιωμένο ποσό για να μειωθεί η ίδια συμμετοχή.</li>
+        </ul>
+      </details>
     </section>
   )
 }

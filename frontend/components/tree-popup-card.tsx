@@ -83,6 +83,10 @@ function interventionQuantity(item: Intervention) {
     const count = item.shade_impact.unit_count
     return `${numeric(count)} ${count === 1 ? "σκίαστρο" : "σκίαστρα"}`
   }
+  if (item.type === "shaded_bench" && item.shade_impact) {
+    const count = item.shade_impact.unit_count
+    return `${numeric(count)} ${count === 1 ? "παγκάκι με σκίαστρο" : "παγκάκια με σκίαστρο"}`
+  }
   return null
 }
 
@@ -99,10 +103,15 @@ function SiteAssessment({ brief }: { brief: SiteCardResponse }) {
         {assumptions ? (
           <>
             <p className={styles.payback}>
-              {brief.simple_payback_year === null
-                ? `Δεν αποσβένεται σε ${numeric(assumptions.horizon_years)} έτη`
-                : `Απλή απόσβεση σε ${numeric(brief.simple_payback_year)} έτη`}
+              {assumptions.annual_savings_eur <= 0
+                ? "Η θέση χρειάζεται μετρήσιμη εξοικονόμηση για να εκτιμηθεί απόσβεση."
+                : brief.simple_payback_year === null
+                  ? `Δεν αποσβένεται σε ${numeric(assumptions.horizon_years)} έτη`
+                  : `Απλή απόσβεση σε ${numeric(brief.simple_payback_year)} έτη`}
             </p>
+            {brief.required_annual_savings_eur !== null && (
+              <p className={styles.context}>Όριο οικονομικής κάλυψης {euros(brief.required_annual_savings_eur)}/έτος σε {numeric(assumptions.horizon_years)} έτη.</p>
+            )}
             <details className={styles.details}>
               <summary>Υποθετικές παραδοχές</summary>
               <p>{euros(assumptions.annual_savings_eur)} εξοικονόμηση και {euros(assumptions.annual_maintenance_eur)} συντήρηση ανά έτος.</p>
@@ -110,7 +119,6 @@ function SiteAssessment({ brief }: { brief: SiteCardResponse }) {
               <p>Προεξοφλημένη απόσβεση {brief.discounted_payback_year === null
                 ? `πέρα από τα ${numeric(assumptions.horizon_years)} έτη`
                 : `σε ${numeric(brief.discounted_payback_year)} έτη`}.</p>
-              {brief.required_annual_savings_eur !== null && <p>Απαιτούμενη εξοικονόμηση για κάλυψη κόστους {euros(brief.required_annual_savings_eur)} τον χρόνο.</p>}
             </details>
           </>
         ) : (

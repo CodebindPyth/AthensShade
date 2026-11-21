@@ -170,11 +170,11 @@ def test_plan_card_contains_site_finances_without_model(data: dict, tmp_path: Pa
     assert card["model"] is None
     assert "hot-a" in card["explanation"]
     assert card["assumptions"] == {
-        "annual_savings_eur": 2000.0, "annual_maintenance_eur": 200.0, "horizon_years": 20,
+        "annual_savings_eur": 0.0, "annual_maintenance_eur": 200.0, "horizon_years": 20,
         "discount_rate_pct": 3.0, "savings_delay_years": 0,
     }
-    assert card["simple_payback_year"] == 6
-    assert card["discounted_payback_year"] == 7
+    assert card["simple_payback_year"] is None
+    assert card["discounted_payback_year"] is None
     assert card["required_annual_savings_eur"] > card["assumptions"]["annual_maintenance_eur"]
     assert client.post("/api/locations/hot-b/plan-card", json=request).status_code == 422
     assert client.post("/api/locations/unknown-id/plan-card", json=request).status_code == 404
@@ -240,7 +240,7 @@ def test_plan_card_uses_template_on_out_of_scope_model_answer(data: dict, tmp_pa
     monkeypatch.setattr("app.plan_card.httpx.post", model_response)
     card = app_for(data, tmp_path).post("/api/locations/hot-a/plan-card", json={"budget_eur": 50_000}).json()
     assert card["source"] == "verified_template"
-    assert card["assumptions"]["annual_savings_eur"] == 2000
+    assert card["assumptions"]["annual_savings_eur"] == 0
 
 
 def test_budget_and_inspection_comparison(client: TestClient) -> None:

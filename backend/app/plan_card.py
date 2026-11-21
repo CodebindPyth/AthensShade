@@ -35,6 +35,12 @@ _ACTION_GUIDANCE: dict[InterventionType, tuple[Option, Option]] = {
         ("maintenance", "Obtain maintenance quotes for the installed structure",
          "Ζήτησε κόστος συντήρησης και αντικατάστασης του σκιάστρου για τον οικονομικό υπολογισμό."),
     ),
+    "shaded_bench": (
+        ("access", "Check step-free access and space beside the bench",
+         "Έλεγξε την προσβάσιμη όδευση και τον ελεύθερο χώρο δίπλα στο κάθισμα."),
+        ("seat_shade", "Verify shade falls onto the entire seating area during the hottest hours",
+         "Επαλήθευσε ότι το σκίαστρο καλύπτει τα καθίσματα στις θερμότερες ώρες."),
+    ),
     "greenery": (
         ("water", "Verify drainage and irrigation supply on site",
          "Επιβεβαίωσε την αποστράγγιση και τη δυνατότητα άρδευσης πριν οριστικοποιηθεί η φύτευση."),
@@ -88,10 +94,11 @@ class LocalPlanCardEditor:
         self._retry_at = 0.0
 
     def build(self, site: RankedLocation, items: list[ExplainedIntervention], strategy: str) -> PlanCard:
-        # This classroom-style scenario is deliberately independent of historical or forecast savings.
         capital = sum((Decimal(str(item.cost_eur)) for item in items), start=Decimal(0))
+        # The roof example illustrates an energy bill. Outdoor shade has no assumed cash inflow.
+        savings = Decimal("2000.00") if all(item.type == "green_roof" for item in items) else Decimal(0)
         assumptions = FinancialAssumptions(
-            annual_savings_eur=Decimal("2000.00"),
+            annual_savings_eur=savings,
             annual_maintenance_eur=(capital * Decimal("0.02")).quantize(
                 Decimal("0.01"), rounding=ROUND_HALF_UP,
             ),

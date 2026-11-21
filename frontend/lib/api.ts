@@ -62,7 +62,7 @@ export type AirReading = {
 }
 export type AirObservations = { readings: AirReading[]; source_url: string; registry_url: string }
 export type Analysis = { location: Location; interventions: Intervention[]; explanation: string }
-export type Strategy = "balanced" | "immediate_shade"
+export type Strategy = "balanced" | "immediate_shade" | "shade_and_rest"
 export type Scenario = { budget_eur: number; include_inspection: boolean; strategy: Strategy; priority_only?: boolean }
 export type ShadeRange = { min_m2: number; max_m2: number }
 export type ShadeImpact = {

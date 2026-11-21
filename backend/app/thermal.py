@@ -48,6 +48,13 @@ EVIDENCE: dict[InterventionType, Evidence] = {
         ),
         url="https://www.sciencedirect.com/science/article/pii/S0378778815003540",
     ),
+    "shaded_bench": Evidence(
+        metric="Σκίαση καθιστικού",
+        description=(
+            "Η πραγματική σκίαση εξαρτάται από την ώρα, τον προσανατολισμό και τα ανοίγματα της πέργκολας. "
+            "Μετρήστε τη σκίαση και τη θερμική άνεση στο κάθισμα αφού τοποθετηθεί."
+        ),
+    ),
     "greenery": Evidence(
         metric="Θερμοκρασία επιφάνειας χώρου πρασίνου",
         description=(
@@ -59,7 +66,7 @@ EVIDENCE: dict[InterventionType, Evidence] = {
 
 
 def surface_area(item: ExplainedIntervention) -> tuple[float, float] | None:
-    if item.type in ("tree_planting", "shade_structure") and item.shade_impact is not None:
+    if item.shade_impact is not None:
         return item.shade_impact.estimated_min_m2, item.shade_impact.estimated_max_m2
     if item.type == "green_roof" and item.greened_roof_area_m2 is not None:
         return item.greened_roof_area_m2, item.greened_roof_area_m2

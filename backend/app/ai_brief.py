@@ -85,7 +85,10 @@ class BriefEditor:
         priority_ids = [id_ for id_, _ in priorities]
         step_ids = [id_ for id_, _ in steps]
         options = {
-            "goal": "άμεση σκίαση" if strategy == "immediate_shade" else "ισορροπημένο πλάνο",
+            "goal": {
+                "immediate_shade": "άμεση σκίαση",
+                "shade_and_rest": "άμεση σκίαση και προσβάσιμες στάσεις ξεκούρασης",
+            }.get(strategy, "ισορροπημένο πλάνο"),
             "priorities": dict(priorities),
             "verification_steps": dict(steps),
         }

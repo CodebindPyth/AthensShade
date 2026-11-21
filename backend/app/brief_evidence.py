@@ -30,12 +30,14 @@ class BriefEvidence:
 INTERVENTION_LABELS: dict[InterventionType, str] = {
     "tree_planting": "Φύτευση δέντρων",
     "shade_structure": "Εγκατάσταση σκιάστρου",
+    "shaded_bench": "Σκιασμένα παγκάκια",
     "greenery": "Διαμόρφωση πρασίνου",
     "green_roof": "Φυτεμένο δώμα",
 }
 INSPECTION_CHECKS: dict[InterventionType, str] = {
     "tree_planting": "τον χώρο για τις ρίζες, τα υπόγεια δίκτυα και τη δυνατότητα άρδευσης",
     "shade_structure": "τον χώρο στήριξης, τη ζώνη σκιάς και την προσβασιμότητα",
+    "shaded_bench": "τη σκιά στο κάθισμα, την ελεύθερη όδευση και τον χώρο δίπλα για αμαξίδιο",
     "greenery": "τη διαθέσιμη επιφάνεια, το έδαφος και τη δυνατότητα άρδευσης",
     "green_roof": "τη φέρουσα ικανότητα, τη στεγάνωση και την απορροή του δώματος",
 }
@@ -73,7 +75,7 @@ def _impact_facts(plan: Plan) -> list[BriefFact]:
         area = _range(shade.after_installation.min_m2, shade.after_installation.max_m2)
         facts.append(BriefFact(
             "immediate-shade",
-            f"Τα σκίαστρα εκτιμάται ότι δίνουν {area} m² δυνητικής σκιάς μετά την εγκατάσταση.",
+            f"Οι παρεμβάσεις άμεσης σκίασης εκτιμάται ότι δίνουν {area} m² δυνητικής σκιάς μετά την εγκατάσταση.",
             "Έκταση σκιάς μετά την εγκατάσταση",
         ))
     if shade.at_tree_maturity.max_m2 > 0:

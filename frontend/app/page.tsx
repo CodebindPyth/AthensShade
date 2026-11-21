@@ -38,7 +38,7 @@ export default function AthensShade() {
   const [budget, setBudget] = useState(String(defaultBudget))
   const [baseline, setBaseline] = useState("50000")
   const [includeInspection, setIncludeInspection] = useState(true)
-  const [strategy, setStrategy] = useState<Strategy>("balanced")
+  const [strategy, setStrategy] = useState<Strategy>("shade_and_rest")
   const [plan, setPlan] = useState<Plan | null>(null)
   const [busy, setBusy] = useState(false)
   const [planError, setPlanError] = useState<string | null>(null)

@@ -1,8 +1,50 @@
 .summary h3,
+.quantities h3,
 .comparison h3 {
   margin: 0;
   color: var(--ink);
   font-size: 14px;
+}
+
+.quantities {
+  margin-top: 12px;
+}
+
+.quantities dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(135px, 100%), 1fr));
+  gap: 6px;
+  margin: 7px 0 0;
+}
+
+.quantities dl > div {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid #dce9df;
+  border-radius: 5px;
+  background: #f4f8f5;
+}
+
+.quantities dt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--body);
+  font-size: 11px;
+}
+
+.quantities dt svg {
+  flex: 0 0 auto;
+  color: var(--green);
+}
+
+.quantities dd {
+  margin: 3px 0 0;
+  color: var(--green);
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .summary .metrics {

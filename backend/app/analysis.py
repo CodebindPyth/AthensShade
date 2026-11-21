@@ -1,6 +1,7 @@
 from collections import defaultdict
 from statistics import quantiles
 
+from .bench_scenarios import add_shaded_bench_scenarios
 from .models import (
     Dataset,
     ExplainedIntervention,
@@ -29,8 +30,9 @@ class AthensAnalysis:
             self.hotspot_threshold = quantiles(temperatures, n=4, method="inclusive")[2]
 
         self.locations = {location.id: self.rank(location) for location in dataset.locations}
+        self.dataset = add_shaded_bench_scenarios(dataset, self.locations)
         self.interventions_by_location: dict[str, list[Intervention]] = defaultdict(list)
-        for intervention in dataset.interventions:
+        for intervention in self.dataset.interventions:
             self.interventions_by_location[intervention.location_id].append(intervention)
 
     def rank(self, location: Location) -> RankedLocation:
