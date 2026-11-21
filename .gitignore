@@ -1,0 +1,25 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pytest-*/
+.ruff_cache/
+
+# Next.js and Node
+node_modules/
+.next/
+next-env.d.ts
+out/
+*.tsbuildinfo
+playwright-report/
+test-results/
+
+# Machine-local files and downloaded source inputs
+.env
+.env.*
+!.env.example
+data/raw/
+*.log
+.DS_Store
+Thumbs.db
