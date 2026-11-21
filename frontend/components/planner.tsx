@@ -79,6 +79,9 @@ export function Planner(props: PlannerProps) {
               <p className="verified-label"><ShieldCheck size={16} /> Επιβεβαιωμένες θέσεις</p>
             )}
             {plan.selected.length > 0 && Boolean(plan.shade_impact || plan.greened_roof_area_m2) && <ImpactCard plan={plan} />}
+            {plan.selected.length > 0 && !props.isStale && (
+              <a className="impact-evaluation-link" href="#investment-appraisal">Εκτίμηση ψύξης και απόσβεσης ↓</a>
+            )}
             {plan.selected.length === 0 ? (
               <div className="plan-empty">
                 <strong>{plan.status === "no_affordable_interventions" ? "Ο προϋπολογισμός δεν επαρκεί" : plan.include_inspection ? "Δεν επιλέχθηκαν θέσεις" : "Δεν βρέθηκαν επιβεβαιωμένες θέσεις"}</strong>

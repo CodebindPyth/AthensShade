@@ -70,6 +70,20 @@ export type ShadeImpact = {
   at_tree_maturity: ShadeRange
   unestimated_count: number
 }
+export type ThermalImpact = {
+  type: string
+  area_min_m2: number | null
+  area_max_m2: number | null
+  installation_cost_eur: number
+  cost_per_m2_min_eur: number | null
+  cost_per_m2_max_eur: number | null
+  cooling_min_c: number | null
+  cooling_max_c: number | null
+  metric: string
+  evidence: string
+  evidence_url: string | null
+  location_ids: string[]
+}
 export type Plan = Scenario & {
   dataset_version: string
   total_cost_eur: number
@@ -80,8 +94,28 @@ export type Plan = Scenario & {
   priority_site_count?: number
   shade_impact?: ShadeImpact
   greened_roof_area_m2?: number
+  thermal_impact?: ThermalImpact[]
 }
 export type Comparison = { baseline: Plan; proposed: Plan; added_ids: string[]; removed_ids: string[]; retained_ids: string[] }
+export type FinancialAssumptions = {
+  annual_savings_eur: number
+  annual_maintenance_eur: number
+  horizon_years: number
+  discount_rate_pct: number
+  savings_delay_years: number
+  grant_eur: number
+  capital_override_eur?: number | null
+}
+export type FinancialAppraisal = {
+  capital_cost_eur: number
+  net_initial_cost_eur: number
+  npv_eur: number
+  cumulative_net_eur: number
+  simple_payback_year: number | null
+  discounted_payback_year: number | null
+  required_annual_savings_eur: number | null
+  sensitivity: { change_pct: number; annual_savings_eur: number; npv_eur: number }[]
+}
 
 export type LayerName = "heat" | "trees" | "context"
 export type Layers = Record<LayerName, FeatureCollection>
@@ -94,12 +128,15 @@ export const api = {
   analysis: (id: string, signal?: AbortSignal) => request<Analysis>(`/locations/${encodeURIComponent(id)}/analysis`, { signal }),
   optimize: (scenario: Scenario, signal?: AbortSignal) => post<Plan>("/optimize", scenario, signal),
   compare: (baseline: Scenario, proposed: Scenario) => post<Comparison>("/scenarios/compare", { baseline, proposed }),
+  appraise: (scenario: Scenario, assumptions: FinancialAssumptions, signal?: AbortSignal, interventionType?: string) =>
+    post<FinancialAppraisal>("/investment-appraisal", { scenario, assumptions, intervention_type: interventionType }, signal),
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, options)
   if (!response.ok) {
-    throw new Error(`Η υπηρεσία επέστρεψε κωδικό ${response.status}.`)
+    const body = await response.json().catch(() => null)
+    throw new Error(typeof body?.detail === "string" ? body.detail : `Η υπηρεσία επέστρεψε κωδικό ${response.status}.`)
   }
   return response.json() as Promise<T>
 }

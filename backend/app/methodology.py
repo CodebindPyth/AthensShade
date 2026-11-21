@@ -31,12 +31,24 @@ def methodology() -> MethodologyResponse:
             MethodologyIndicator(
                 indicator="Θερμοκρασία επιφάνειας",
                 unit="°C",
-                method="Θερμικές μετρήσεις στα ίδια σημεία δώματος και εδάφους με κοινές συνθήκες δειγματοληψίας.",
+                method=(
+                    "Το πλάνο μεταφέρει δημοσιευμένα εύρη μόνο για συγκρίσιμες σκιασμένες επιφάνειες "
+                    "και δηλώνει ποια τεχνικά στοιχεία λείπουν. Η επαλήθευση χρησιμοποιεί θερμικές "
+                    "μετρήσεις στα ίδια σημεία με κοινές συνθήκες δειγματοληψίας."
+                ),
             ),
             MethodologyIndicator(
                 indicator="Θερμοκρασία αέρα στο ύψος πεζού",
                 unit="°C",
                 method="Συγχρονισμένοι, θωρακισμένοι αισθητήρες περίπου στο 1,5 μ. από το έδαφος.",
+            ),
+            MethodologyIndicator(
+                indicator="Οικονομική αποτίμηση του Δήμου",
+                unit="€",
+                method=(
+                    "Προεξόφληση δηλωμένων ετήσιων εξοικονομήσεων και δαπανών συντήρησης. "
+                    "Το αρχικό κόστος του πλάνου ή της προσφοράς μειώνεται από την επιχορήγηση."
+                ),
             ),
         ],
         monitoring=[
@@ -61,6 +73,10 @@ def methodology() -> MethodologyResponse:
             MethodologyReference(
                 title="US EPA · Measuring Heat Islands",
                 url="https://www.epa.gov/heatislands/measuring-heat-islands",
+            ),
+            MethodologyReference(
+                title="Ευρωπαϊκή Επιτροπή · Οικονομική αξιολόγηση επενδύσεων",
+                url="https://ec.europa.eu/regional_policy/sources/guides/vademecum_2127/vademecum_2127_en.pdf",
             ),
             MethodologyReference(
                 title="US EPA · Reducing Urban Heat Islands: Green Roofs",

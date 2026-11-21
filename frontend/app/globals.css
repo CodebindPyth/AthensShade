@@ -112,6 +112,14 @@ input[type="checkbox"] { flex: 0 0 auto; margin: 0; height: 18px; width: 18px; a
 .legend-swatch--trees { background: #66af85; }
 .legend-swatch--air { background: #edfaff; border: 1px solid #14648b; }
 .legend-swatch--park { background: #236840; }
+.impact-evaluation-link {
+  display: inline-block;
+  margin: 9px 0 3px;
+  color: var(--blue-deep);
+  font-size: 13px;
+  font-weight: 600;
+  text-underline-offset: 3px;
+}
 .legend-swatch--planting { background: #2d744f; border-radius: 50%; }
 .legend-swatch--schools { background: #7486b2; border-radius: 50%; }
 .legend-swatch--candidate { background: #204d6d; border-radius: 50%; }

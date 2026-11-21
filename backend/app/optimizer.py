@@ -14,6 +14,7 @@ from .models import (
     PlanStrategy,
     ShadeHorizon,
 )
+from .thermal import project_thermal_impact
 
 
 class OptimizationError(Exception):
@@ -76,6 +77,7 @@ def optimize(analysis: AthensAnalysis, request: OptimizeRequest) -> Plan:
         greened_roof_area_m2=round(sum(row.greened_roof_area_m2 or 0 for row in picks), 2),
         population_exposure_proxy=round(sum(selected_densities), 3),
         population_priority_sites_with_data=len(selected_densities),
+        thermal_impact=project_thermal_impact(picks),
     )
 
 

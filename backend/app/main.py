@@ -1,5 +1,6 @@
 import logging
 import os
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
@@ -10,6 +11,7 @@ from pydantic import ValidationError
 
 from .air import AIR_SOURCE, AirFeed, AirResponse
 from .analysis import TREE_DEFICIT_THRESHOLD_PERCENT, AthensAnalysis
+from .investment import AppraiseRequest, FinancialAppraisal, appraise_investment
 from .methodology import methodology
 from .models import (
     CompareRequest,
@@ -124,6 +126,20 @@ def create_app(dataset_path: Path | None = None) -> FastAPI:
     @api.post("/optimize", tags=["Planning"])
     def plan(request: OptimizeRequest, analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)]) -> Plan:
         return get_plan(analysis, request)
+
+    @api.post("/investment-appraisal", tags=["Planning"])
+    def investment_appraisal(
+        request: AppraiseRequest, analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)],
+    ) -> FinancialAppraisal:
+        plan = get_plan(analysis, request.scenario)
+        selected = [item for item in plan.selected if request.intervention_type in (None, item.type)]
+        if not selected:
+            raise HTTPException(status_code=422, detail="Το πλάνο δεν περιλαμβάνει παρεμβάσεις για αυτή την αποτίμηση.")
+        capital = sum((Decimal(str(item.cost_eur)) for item in selected), start=Decimal(0))
+        try:
+            return appraise_investment(capital, request.assumptions)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @api.post("/scenarios/compare", tags=["Planning"])
     def compare(

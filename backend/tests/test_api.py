@@ -277,3 +277,37 @@ def test_immediate_shade_strategy_uses_lower_footprint_before_benefit(data: dict
     assert [row.id for row in immediate.selected] == ["shade-a"]
     assert immediate.priority_site_count == balanced.priority_site_count == 1
     assert immediate.shade_impact.after_installation.min_m2 == 36
+
+
+def test_plan_reports_evidence_ranges_and_cost_per_matching_area(client: TestClient) -> None:
+    response = client.post("/api/optimize", json={"budget_eur": 50_000})
+    assert response.status_code == 200
+    impact, = response.json()["thermal_impact"]
+    assert impact["type"] == "shade_structure"
+    assert (impact["area_min_m2"], impact["area_max_m2"]) == (36, 45)
+    assert (impact["cost_per_m2_min_eur"], impact["cost_per_m2_max_eur"]) == (1066.67, 1333.33)
+    assert (impact["cooling_min_c"], impact["cooling_max_c"]) == (9.2, 13.2)
+    assert impact["evidence_url"].startswith("https://doi.org/")
+
+
+def test_financial_appraisal_uses_selected_type_and_optional_municipal_quote(client: TestClient) -> None:
+    request = {
+        "scenario": {"budget_eur": 100_000, "include_inspection": True},
+        "intervention_type": "shade_structure",
+        "assumptions": {
+            "annual_savings_eur": 9000, "annual_maintenance_eur": 2000,
+            "horizon_years": 20, "discount_rate_pct": 3,
+        },
+    }
+    result = client.post("/api/investment-appraisal", json=request)
+    assert result.status_code == 200
+    assert result.json()["capital_cost_eur"] == 48000
+
+    request["assumptions"].update(capital_override_eur=53000, grant_eur=5000)
+    override = client.post("/api/investment-appraisal", json=request)
+    assert override.status_code == 200
+    assert override.json()["capital_cost_eur"] == 53000
+    assert override.json()["net_initial_cost_eur"] == 48000
+
+    request["intervention_type"] = "green_roof"
+    assert client.post("/api/investment-appraisal", json=request).status_code == 422

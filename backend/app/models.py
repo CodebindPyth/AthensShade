@@ -226,6 +226,21 @@ class OptimizeRequest(BaseModel):
     strategy: PlanStrategy = "balanced"
 
 
+class ThermalImpact(BaseModel):
+    type: InterventionType
+    area_min_m2: float | None
+    area_max_m2: float | None
+    installation_cost_eur: float
+    cost_per_m2_min_eur: float | None
+    cost_per_m2_max_eur: float | None
+    cooling_min_c: float | None
+    cooling_max_c: float | None
+    metric: str
+    evidence: str
+    evidence_url: HttpUrl | None
+    location_ids: list[str]
+
+
 class Plan(BaseModel):
     dataset_version: str
     budget_eur: float
@@ -241,6 +256,7 @@ class Plan(BaseModel):
     greened_roof_area_m2: float
     population_exposure_proxy: float
     population_priority_sites_with_data: int
+    thermal_impact: list[ThermalImpact] = Field(default_factory=list)
 
 
 class CompareRequest(BaseModel):
