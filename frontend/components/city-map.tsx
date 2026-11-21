@@ -81,49 +81,25 @@ function proposalPoint(location: Location, intervention?: Intervention) {
   return L.latLng(site?.latitude ?? location.latitude, site?.longitude ?? location.longitude)
 }
 
-function treeCoolingMask(points: L.Point[], radius: number, offsetY = 0) {
-  const mask = new Path2D()
-  for (const { x, y } of points) {
-    mask.moveTo(x + radius, y + offsetY)
-    mask.arc(x, y + offsetY, radius, 0, 2 * Math.PI)
-  }
-  return mask
+// This is a planning catchment, independent of the modeled temperature under the canopy.
+const neighborhoodRadiusM = 750
+
+function neighborhoodZone(map: L.Map, center: L.LatLng) {
+  const bounds = center.toBounds(neighborhoodRadiusM * 2)
+  const size = map.project(bounds.getSouthEast()).subtract(map.project(bounds.getNorthWest()))
+  return L.divIcon({ className: styles.coolingZone, iconSize: size, iconAnchor: size.divideBy(2) })
 }
 
-function treeCoolingZone(map: L.Map, anchors: L.LatLng[]) {
-  const projected = anchors.map((anchor) => map.project(anchor))
-  const bounds = L.bounds(projected)
-  // Keep groups visible under the overview pin and hug the individual markers at close zoom.
-  const radius = Math.max(12, Math.min(20, Math.round(20 - (map.getZoom() - cityZoom) * 1.5)))
-  const margin = (radius + 5) * 2
-  const size = bounds.getSize().add(L.point(margin, margin)).ceil()
-  const halfSize = size.divideBy(2)
-  const origin = bounds.getCenter().subtract(halfSize)
-  const points = projected.map((point) => point.subtract(origin))
-  const canvas = document.createElement("canvas")
-  canvas.setAttribute("aria-hidden", "true")
-  const density = Math.min(2, window.devicePixelRatio || 1)
-  canvas.width = Math.ceil(size.x * density)
-  canvas.height = Math.ceil(size.y * density)
-  const brush = canvas.getContext("2d")
-  if (brush) {
-    brush.scale(canvas.width / size.x, canvas.height / size.y)
-    brush.fillStyle = "#166652"
-    brush.fill(treeCoolingMask(points, radius, 4))
-    brush.fillStyle = "#a2f0d3"
-    brush.fill(treeCoolingMask(points, radius))
-    const light = brush.createLinearGradient(0, 0, 0, size.y)
-    light.addColorStop(0, "#e3fff4")
-    light.addColorStop(0.52, "#8be6cb")
-    light.addColorStop(1, "#3ca596")
-    brush.fillStyle = light
-    brush.fill(treeCoolingMask(points, radius - 1.5))
-  }
-  return {
-    center: map.unproject(bounds.getCenter()),
-    badgeOffset: halfSize.y - 5,
-    icon: L.divIcon({ html: canvas, className: styles.coolingZone, iconSize: size, iconAnchor: halfSize }),
-  }
+function treeClusterGlyph(glyph: string, quantity: number) {
+  // Overview symbols are part of the pin. On zoom the map shows the surveyed anchors.
+  const count = Math.min(quantity, 6)
+  const satellites = Array.from({ length: count }, (_, index) => {
+    const angle = (index / count) * 2 * Math.PI + Math.PI / 2
+    const x = Math.round(22 * Math.cos(angle))
+    const y = Math.round(22 * Math.sin(angle))
+    return `<i class="${styles.clusterTree}" style="left:calc(50% + ${x}px);top:calc(50% + ${y}px)">${glyph}</i>`
+  }).join("")
+  return `${glyph}<span aria-hidden="true">${satellites}</span><span class="${styles.pinCount}" aria-hidden="true">+${numeric(quantity)}</span>`
 }
 
 function temperatureBadge(cooling: string, offset: number) {
@@ -275,6 +251,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     tiles.on("tileerror", () => { if (loadedTiles === 0) setTilesAvailable(false) })
     tiles.addTo(map)
     const updateScale = () => {
+      map.getContainer().classList.toggle(styles.detailedPlantings, map.getZoom() >= 15.5)
       const width = 120
       const distance = map.distance(map.containerPointToLatLng([0, 0]), map.containerPointToLatLng([width, 0]))
       if (!(distance > 0)) return
@@ -522,7 +499,9 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       const quantity = intervention?.shade_impact?.unit_count
       const label = [location.name, proposedUnits(intervention) ?? appearance.label].join(" · ")
       const icon = L.divIcon({
-        html: `${markerGlyph(appearance)}${quantity && type === "tree_planting" ? `<span class="${styles.pinCount}" aria-hidden="true">+${numeric(quantity)}</span>` : ""}`,
+        html: quantity && type === "tree_planting"
+          ? treeClusterGlyph(markerGlyph(appearance), quantity)
+          : markerGlyph(appearance),
         iconSize: [32, 32],
         iconAnchor: [16, 16],
         className: styles.treePin,
@@ -611,34 +590,30 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       const minimum = impact?.cooling_min_c
       const cooling = minimum == null ? null : `−${temperature(minimum)}`
       const open = () => setTreeSelection({ id: location.id, plan })
-      const points = intervention?.siting?.anchors?.map((point) => L.latLng(point.latitude, point.longitude)) ?? []
-      const zone = intervention?.type === "tree_planting" ? L.marker(actual, {
-        pane: "cooling-zones", icon: L.divIcon({ className: styles.coolingZone }), interactive: false, keyboard: false,
+      const center = intervention?.siting?.anchors?.length
+        ? L.latLngBounds(intervention.siting.anchors.map(({ latitude, longitude }) => L.latLng(latitude, longitude))).getCenter()
+        : actual
+      const zone = intervention?.type === "tree_planting" ? L.marker(center, {
+        pane: "cooling-zones", icon: neighborhoodZone(map, center), interactive: false, keyboard: false,
       }).addTo(geometry) : null
       const title = [location.name, coolingLabel(impact), impact?.metric].filter(Boolean).join(" · ")
       const badge = cooling ? L.marker(actual, {
         pane: "impact-labels", title, alt: title, icon: temperatureBadge(cooling, 33),
       }).addTo(geometry).on("click", open) : null
-      return { location, actual, points, zone, cooling, badge, title, open }
+      if (badge) {
+        const element = badge.getElement()
+        element?.setAttribute("aria-label", title)
+        element?.setAttribute("data-impact-location", location.id)
+        supportSpaceKey(element, open)
+      }
+      return { location, center, zone }
     })
 
     const placeZones = () => {
-      for (const { location, actual, points, zone, cooling, badge, title, open } of zones) {
-        const footprint = zone ? treeCoolingZone(map, points.length ? points : [actual]) : null
-        if (zone && footprint) {
-          zone.setLatLng(footprint.center).setIcon(footprint.icon)
-          zone.getElement()?.setAttribute("data-cooling-zone", location.id)
-        }
-        if (badge && cooling) {
-          badge.setLatLng(footprint?.center ?? actual).setIcon(temperatureBadge(cooling, Math.max(33, footprint?.badgeOffset ?? 0)))
-          const element = badge.getElement()
-          element?.setAttribute("aria-label", title)
-          element?.setAttribute("data-impact-location", location.id)
-          if (element && !element.hasAttribute("data-space-support")) {
-            supportSpaceKey(element, open)
-            element.setAttribute("data-space-support", "true")
-          }
-        }
+      for (const { location, center, zone } of zones) {
+        if (!zone) continue
+        zone.setIcon(neighborhoodZone(map, center))
+        zone.getElement()?.setAttribute("data-cooling-zone", location.id)
       }
     }
     placeZones()
@@ -828,7 +803,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
             <i aria-hidden="true" />
             <div>
               <strong>Υποθετική τοπική ψύξη</strong>
-              <span>Οι ενδείξεις δείχνουν το κατώτερο όριο της εκτιμώμενης ψύξης.</span>
+              <span>Μπλε ζώνη μελέτης · ακτίνα {numeric(neighborhoodRadiusM)} μ. Η ένδειξη °C αφορά την εκτιμώμενη ψύξη στο σημείο φύτευσης ή σκίασης.</span>
             </div>
           </div>
         )}
