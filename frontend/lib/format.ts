@@ -55,16 +55,9 @@ export function heatThresholds(values: number[], hotspotThreshold?: number | nul
   return [warm, warmer, hot, hottest]
 }
 
-export function heatColor(value: number | null, thresholds: [number, number, number, number], muted = false) {
+export function heatColor(value: number | null, thresholds: [number, number, number, number]) {
   const [warm, warmer, hot, hottest] = thresholds
   if (value === null || !Number.isFinite(value)) return "#9ba8b6"
-  if (muted) {
-    if (value >= hottest) return "#566a77"
-    if (value >= hot) return "#788d96"
-    if (value >= warmer) return "#9aadb3"
-    if (value >= warm) return "#b7c6c8"
-    return "#d1dbda"
-  }
   if (value >= hottest) return "#9c2542"
   if (value >= hot) return "#db4851"
   if (value >= warmer) return "#ea754e"

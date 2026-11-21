@@ -29,11 +29,7 @@ type MapProps = {
 
 const cityCenter: L.LatLngExpression = [37.991, 23.731]
 const cityZoom = 12
-const impactLabelSize = L.point(148, 56)
-const impactLabelOffsets = [
-  [0, 50], [100, 30], [-100, 30], [0, -50],
-  [100, -30], [-100, -30], [0, 92], [0, -92],
-] as const
+const impactLabelSize = L.point(73, 24)
 const canopyBands = [
   { below: 5, label: "<5%", color: "#b2d6b1", opacity: 0.24 },
   { below: 15, label: "5–<15%", color: "#6cbe81", opacity: 0.5 },
@@ -85,12 +81,28 @@ function proposalPoint(location: Location, intervention?: Intervention) {
   return L.latLng(site?.latitude ?? location.latitude, site?.longitude ?? location.longitude)
 }
 
-function coolingZoneIcon(projectedRadius: number, coolingKnown: boolean) {
-  const width = Math.max(54, Math.min(214, Math.round(projectedRadius * 2 + 30)))
-  const height = Math.round(width * 0.77)
+function coolingZoneIcon(size: L.Point) {
   return L.divIcon({
-    className: `${styles.coolingZone}${coolingKnown ? "" : ` ${styles.coolingZoneUnknown}`}`,
-    iconSize: [width, height], iconAnchor: [width / 2, height / 2],
+    className: styles.coolingZone,
+    iconSize: size, iconAnchor: size.divideBy(2),
+  })
+}
+
+function treeZoneBounds(map: L.Map, points: L.LatLng[]) {
+  const bounds = L.bounds(points.map((point) => map.project(point)))
+  // Expanding both radii by sqrt(2) keeps the padded corners inside the ellipse.
+  const diameter = bounds.getSize().add(L.point(22, 20)).multiplyBy(Math.SQRT2).round()
+  return {
+    center: map.unproject(bounds.getCenter()),
+    size: L.point(Math.max(38, diameter.x), Math.max(30, diameter.y)),
+  }
+}
+
+function temperatureBadge(cooling: string, offset: number) {
+  return L.divIcon({
+    html: tooltip(cooling), iconSize: impactLabelSize,
+    iconAnchor: [impactLabelSize.x / 2, offset + impactLabelSize.y / 2],
+    className: styles.impactLabel,
   })
 }
 
@@ -103,14 +115,11 @@ function impactArea(intervention?: Intervention) {
   if (intervention?.shade_impact) {
     const { estimated_min_m2, estimated_max_m2, horizon } = intervention.shade_impact
     const range = shadeArea(estimated_min_m2, estimated_max_m2)
-    return {
-      short: `${range} σκιάς`,
-      detail: `Εκτιμώμενη σκιά ${range} ${horizon === "at_tree_maturity" ? "σε ώριμη κόμη" : "μετά την εγκατάσταση"}.`,
-    }
+    return `Εκτιμώμενη σκιά ${range} ${horizon === "at_tree_maturity" ? "σε ώριμη κόμη" : "μετά την εγκατάσταση"}.`
   }
   if (intervention?.greened_roof_area_m2 != null) {
     const roof = `${numeric(intervention.greened_roof_area_m2)} m²`
-    return { short: `${roof} δώματος`, detail: `Προτεινόμενη φύτευση σε ${roof} δώματος.` }
+    return `Προτεινόμενη φύτευση σε ${roof} δώματος.`
   }
   return null
 }
@@ -124,14 +133,6 @@ function proposedUnits(intervention?: Intervention) {
   if (intervention.type === "shade_structure") {
     return count === 1 ? "+1 προτεινόμενο σκίαστρο" : `+${numeric(count)} προτεινόμενα σκίαστρα`
   }
-}
-
-function impactBadge(cooling: string, units?: string, area?: string) {
-  const content = document.createElement("div")
-  content.append(tooltip(cooling))
-  if (units) content.append(tooltip(units))
-  if (area) content.append(tooltip(area))
-  return content
 }
 
 function supportSpaceKey(element: HTMLElement | undefined, activate: () => void) {
@@ -148,24 +149,6 @@ function coolingLabel(impact?: ThermalImpact) {
   const max = impact?.cooling_max_c
   if (min == null || max == null) return null
   return min === max ? `−${numeric(min)} °C` : `−${numeric(min)} έως −${numeric(max)} °C`
-}
-
-function impactLabelPosition(origin: L.Point, occupied: L.Point[], markers: L.Point[]) {
-  for (const ring of [1, 2, 3, 4]) {
-    for (const [x, y] of impactLabelOffsets) {
-      const candidate = origin.add(L.point(x * ring, y * ring))
-      const overlapsLabel = occupied.some((point) => (
-        Math.abs(point.x - candidate.x) < impactLabelSize.x + 4
-        && Math.abs(point.y - candidate.y) < impactLabelSize.y + 5
-      ))
-      const overlapsMarker = markers.some((point) => (
-        Math.abs(point.x - candidate.x) < impactLabelSize.x / 2 + 19
-        && Math.abs(point.y - candidate.y) < impactLabelSize.y / 2 + 19
-      ))
-      if (!overlapsLabel && !overlapsMarker) return candidate
-    }
-  }
-  return origin.add(L.point(0, 48))
 }
 
 function airPopup(reading: AirReading, air: AirObservations) {
@@ -249,7 +232,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     }).setView(cityCenter, cityZoom)
     instance.current = map
     map.attributionControl.setPrefix(false)
-    for (const [name, zIndex] of [["heat", 380], ["context", 410], ["trees", 420], ["plantings", 425], ["impact", 430], ["cooling-zones", 435], ["neighborhood-labels", 605], ["proposal-anchors", 500], ["impact-labels", 625]] as const) {
+    for (const [name, zIndex] of [["heat", 380], ["context", 410], ["trees", 420], ["plantings", 425], ["cooling-zones", 435], ["neighborhood-labels", 605], ["proposal-anchors", 500], ["impact-labels", 625]] as const) {
       map.createPane(name).style.zIndex = String(zIndex)
     }
     map.getPane("plantings")?.style.setProperty("pointer-events", "none")
@@ -346,11 +329,11 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     const layer = L.geoJSON(heat, {
       pane: "heat",
       style: (feature) => ({
-        color: showImpact ? "#e0e8e8" : "#fff7e9",
+        color: "#fff7e9",
         weight: 0.45,
         opacity: 0.53,
-        fillColor: heatColor(temperatureOf(feature), breaks, showImpact),
-        fillOpacity: showImpact ? 0.39 : 0.68,
+        fillColor: heatColor(temperatureOf(feature), breaks),
+        fillOpacity: 0.68,
       }),
       onEachFeature: (feature, shape) => {
         const value = temperatureOf(feature)
@@ -360,7 +343,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
           name: asText(feature.properties?.name) ?? undefined,
         }
         shape.on("click", () => onSelectTile(selection))
-        if (value !== null) shape.bindTooltip(tooltip(temperature(value)), { sticky: true, direction: "top" })
+        if (value !== null && !showImpact) shape.bindTooltip(tooltip(temperature(value)), { sticky: true, direction: "top" })
       },
     }).addTo(map)
     if (!thermalBounds.current && layer.getBounds().isValid()) {
@@ -593,64 +576,41 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       animate: false,
     })
     const geometry = L.layerGroup().addTo(map)
-    const labels = L.layerGroup().addTo(map)
     const zones = plannedLocations.map((location) => {
       const intervention = interventionByLocation.get(location.id)
       const actual = proposalPoint(location, intervention)
       const impact = impactByLocation.get(location.id)
-      const cooling = coolingLabel(impact)
-      const area = impactArea(intervention)
-      const units = proposedUnits(intervention)
-      const color = cooling ? "#176d87" : "#53647b"
+      const minimum = impact?.cooling_min_c
+      const cooling = minimum == null ? null : `−${temperature(minimum)}`
       const open = () => setTreeSelection({ id: location.id, plan })
-      const screenedArea = intervention?.siting?.evidence?.geometry
-      if (screenedArea) {
-        const screenedFeature: Feature = { type: "Feature", geometry: screenedArea, properties: {} }
-        L.geoJSON(screenedFeature, {
-          pane: "impact",
-          interactive: false,
-          style: { color: "#176544", weight: 2, dashArray: "5 4", fillColor: "#51a575", fillOpacity: 0.18 },
-        }).addTo(geometry)
-      }
-      const zone = L.marker(actual, {
-        pane: "cooling-zones", icon: coolingZoneIcon(0, Boolean(cooling)), interactive: false, keyboard: false,
-      }).addTo(geometry)
-      const proposedPoints = intervention?.siting?.anchors?.map((anchor) => L.latLng(anchor.latitude, anchor.longitude)) ?? []
-      const guide = L.polyline([], {
-        pane: "impact", color, weight: 1, opacity: 0.75, interactive: false,
-      }).addTo(geometry)
-      const label = cooling ?? "Χωρίς εκτίμηση ψύξης"
-      const title = [location.name, label, units, area?.short, impact?.metric].filter(Boolean).join(" · ")
-      const marker = L.marker(actual, {
-        pane: "impact-labels", title,
-        icon: L.divIcon({
-          html: impactBadge(label, units, area?.short), iconSize: impactLabelSize,
-          iconAnchor: impactLabelSize.divideBy(2),
-          className: `${styles.impactLabel}${cooling ? "" : ` ${styles.impactUnknown}`}`,
-        }),
-      }).addTo(labels)
-      const element = marker.getElement()
-      element?.setAttribute("aria-label", title)
-      element?.setAttribute("data-impact-location", location.id)
-      marker.on("click", open)
-      supportSpaceKey(element, open)
-      return { actual, zone, proposedPoints, cooling: Boolean(cooling), guide, marker }
+      const points = [actual, ...(intervention?.siting?.anchors?.map((point) => L.latLng(point.latitude, point.longitude)) ?? [])]
+      const zone = intervention?.type === "tree_planting" ? L.marker(actual, {
+        pane: "cooling-zones", icon: coolingZoneIcon(L.point(38, 30)), interactive: false, keyboard: false,
+      }).addTo(geometry) : null
+      const title = [location.name, coolingLabel(impact), impact?.metric].filter(Boolean).join(" · ")
+      const badge = cooling ? L.marker(actual, {
+        pane: "impact-labels", title, alt: title, icon: temperatureBadge(cooling, 33),
+      }).addTo(geometry).on("click", open) : null
+      return { location, actual, points, zone, cooling, badge, title, open }
     })
 
     const placeZones = () => {
-      const occupied: L.Point[] = []
-      const pinCenters = [...treeMarkers.current.values(), ...municipalMarkers.current.values()]
-        .filter((marker) => !marker.getElement()?.hidden)
-        .map((marker) => map.project(marker.getLatLng()))
-      for (const { actual, zone, proposedPoints, cooling, guide, marker } of zones) {
-        const origin = map.project(actual)
-        const radius = proposedPoints.reduce((max, point) => Math.max(max, origin.distanceTo(map.project(point))), 0)
-        const center = impactLabelPosition(origin, occupied, pinCenters)
-        occupied.push(center)
-        const labelPosition = map.unproject(center)
-        zone.setIcon(coolingZoneIcon(radius, cooling))
-        guide.setLatLngs([actual, labelPosition])
-        marker.setLatLng(labelPosition)
+      for (const { location, actual, points, zone, cooling, badge, title, open } of zones) {
+        const footprint = zone ? treeZoneBounds(map, points) : null
+        if (zone && footprint) {
+          zone.setLatLng(footprint.center).setIcon(coolingZoneIcon(footprint.size))
+          zone.getElement()?.setAttribute("data-cooling-zone", location.id)
+        }
+        if (badge && cooling) {
+          badge.setLatLng(footprint?.center ?? actual).setIcon(temperatureBadge(cooling, Math.max(33, (footprint?.size.y ?? 0) / 2)))
+          const element = badge.getElement()
+          element?.setAttribute("aria-label", title)
+          element?.setAttribute("data-impact-location", location.id)
+          if (element && !element.hasAttribute("data-space-support")) {
+            supportSpaceKey(element, open)
+            element.setAttribute("data-space-support", "true")
+          }
+        }
       }
     }
     placeZones()
@@ -658,7 +618,6 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     return () => {
       map.off("zoomend", placeZones)
       geometry.remove()
-      labels.remove()
       if (instance.current === map) map.setView(previousView.center, previousView.zoom, { animate: false })
     }
   }, [impactByLocation, interventionByLocation, plan, plannedLocations, showImpact])
@@ -799,7 +758,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
               <section className={styles.impactDetail} aria-label="Υποθετική τοπική ψύξη">
                 <strong>{coolingLabel(activeImpact) ?? "Χωρίς αριθμητική εκτίμηση"}</strong>
                 {activeUnits && <p className={styles.impactUnits}>{activeUnits}</p>}
-                {activeArea && <p className={styles.impactArea}>{activeArea.detail}</p>}
+                {activeArea && <p className={styles.impactArea}>{activeArea}</p>}
                 {activeImpact && <p>{activeImpact.metric}. {activeImpact.evidence}</p>}
                 {activeImpact?.evidence_url && (
                   <a href={activeImpact.evidence_url} rel="noreferrer" target="_blank">Μελέτη αναφοράς</a>
@@ -841,7 +800,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
             <i aria-hidden="true" />
             <div>
               <strong>Υποθετική τοπική ψύξη</strong>
-              <span>Ζώνες ψύξης ενδεικτικής έκτασης · δημόσια κτίρια με προτάσεις φύτευσης και φυτεμένου δώματος</span>
+              <span>Οι ενδείξεις δείχνουν το κατώτερο όριο της εκτιμώμενης ψύξης.</span>
             </div>
           </div>
         )}
@@ -851,7 +810,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
             <div className="legend-bands">
               {[breaks[0] - 1, ...breaks].map((value, index) => (
                 <div key={value} title={index === 0 ? `Κάτω από ${temperature(breaks[0])}` : index < breaks.length ? `Από ${temperature(value)} έως κάτω από ${temperature(breaks[index])}` : `Από ${temperature(value)} και άνω`}>
-                  <span style={{ background: heatColor(value, breaks, showImpact) }} />
+                  <span style={{ background: heatColor(value, breaks) }} />
                   {index === 0 ? `<${numeric(breaks[0])}` : index === breaks.length ? `${numeric(value)}+` : numeric(value)}
                 </div>
               ))}
