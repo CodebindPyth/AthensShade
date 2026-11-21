@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Sparkles } from "lucide-react"
 import { api } from "../lib/api"
 import type { Intervention, Location, Plan, SiteCardResponse } from "../lib/api"
-import { euros, feasibilityLabel, interventionLabel, numeric, shadeLabel, temperature } from "../lib/format"
+import { euros, feasibilityLabel, interventionLabel, numeric, shadeArea, shadeLabel, temperature } from "../lib/format"
 import styles from "./tree-popup-card.module.css"
 
 type TreePopupCardProps = { location: Location; plan: Plan }
@@ -29,11 +29,19 @@ export function TreePopupCard({ location, plan }: TreePopupCardProps) {
         <p className={styles.context}>
           {[
             location.heat_c !== null ? `${temperature(location.heat_c)} επιφάνειας` : null,
-            location.canopy_percent !== null ? `${numeric(location.canopy_percent)}% δενδροκάλυψη` : null,
             shadeLabel(location.shade_status),
           ].filter(Boolean).join(" · ")}
         </p>
       </header>
+      <dl className={styles.greenContext}>
+        <div>
+          <dt>Δενδροκάλυψη στα 100 m</dt>
+          <dd>{location.canopy_percent === null ? "Άγνωστη" : `${numeric(location.canopy_percent)}%`}</dd>
+        </div>
+        {location.planting_records_count != null && (
+          <div><dt>Καταγραφές φύτευσης στα 100 m</dt><dd>{numeric(location.planting_records_count)}</dd></div>
+        )}
+      </dl>
       <ul className={styles.actions} aria-label="Προτεινόμενες παρεμβάσεις">
         {interventions.map((item) => (
           <li key={item.id}>
@@ -44,6 +52,12 @@ export function TreePopupCard({ location, plan }: TreePopupCardProps) {
             <p className={styles.context}>
               {[interventionQuantity(item), feasibilityLabel(item.feasibility)].filter(Boolean).join(" · ")}
             </p>
+            {item.shade_impact && (
+              <p className={styles.context}>
+                Εκτιμώμενη σκιά {shadeArea(item.shade_impact.estimated_min_m2, item.shade_impact.estimated_max_m2)}
+                {item.shade_impact.horizon === "at_tree_maturity" ? " σε ώριμη κόμη" : " μετά την εγκατάσταση"}
+              </p>
+            )}
           </li>
         ))}
       </ul>

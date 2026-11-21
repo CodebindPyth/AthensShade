@@ -102,6 +102,7 @@ export default function AthensShade() {
   const locationById = useMemo(() => new Map(locations.map((location) => [location.id, location])), [locations])
   const sourceById = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources])
   const mapSource = sourceById.get(String(layers.heat?.features[0]?.properties?.source_id ?? ""))
+  const canopyPeriod = sources.find((source) => source.kind === "canopy")?.period
   const selectedLocation = selectedId === null ? null : locationById.get(selectedId) ?? null
 
   const onSelectLocation = useCallback((id: string) => {
@@ -198,6 +199,7 @@ export default function AthensShade() {
                 selectedId={selectedId}
                 plan={mappedPlan}
                 hotspotThreshold={dataset?.heat_hotspot_threshold_c}
+                canopyPeriod={canopyPeriod}
                 onSelectTile={onSelectTile}
               />
               {((selectedLocation && !selectedHasTree) || selectedTile) && (

@@ -20,6 +20,7 @@ type MapProps = {
   selectedId: string | null
   plan: Plan | null
   hotspotThreshold?: number | null
+  canopyPeriod?: string | null
   onSelectTile: (tile: TileSelection) => void
 }
 
@@ -27,6 +28,12 @@ const cityCenter: L.LatLngExpression = [37.991, 23.731]
 const cityZoom = 12
 const treeGlyph = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5m0 0 3.5-3.5M12 17l-2.5-2.5M7 17a4 4 0 0 1-1.3-7.8A5.8 5.8 0 0 1 11.5 3a6 6 0 0 1 5.8 4.4A4.9 4.9 0 0 1 16 17h-1"/></svg>'
 const minimumTreeDistance = 36
+const canopyBands = [
+  { below: 5, label: "<5%", color: "#b2d6b1", opacity: 0.24 },
+  { below: 15, label: "5–<15%", color: "#6cbe81", opacity: 0.5 },
+  { below: 30, label: "15–<30%", color: "#268452", opacity: 0.65 },
+  { below: 101, label: "30%+", color: "#095b3c", opacity: 0.77 },
+]
 
 type TreeSelection = { id: string; plan: Plan }
 type CardPosition = { left: number; top: number; width: number; height: number; anchor: number }
@@ -43,6 +50,11 @@ function treeCardWidth(mapWidth: number) {
 function temperatureOf(feature?: Feature) {
   const number = feature?.properties?.temperature_c
   return typeof number === "number" && Number.isFinite(number) ? number : null
+}
+
+function canopyOf(feature?: Feature) {
+  const percent = feature?.properties?.canopy_percent
+  return typeof percent === "number" && Number.isFinite(percent) && percent >= 0 && percent <= 100 ? percent : null
 }
 
 function asText(value: unknown) {
@@ -78,7 +90,7 @@ function airPopup(reading: AirReading, air: AirObservations) {
   return content
 }
 
-export default function CityMap({ heat, trees, context, air, locations, selectedId, plan, hotspotThreshold, onSelectTile }: MapProps) {
+export default function CityMap({ heat, trees, context, air, locations, selectedId, plan, hotspotThreshold, canopyPeriod, onSelectTile }: MapProps) {
   const container = useRef<HTMLDivElement | null>(null)
   const instance = useRef<L.Map | null>(null)
   const areaBounds = useRef<L.LatLngBounds | null>(null)
@@ -119,9 +131,10 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     }).setView(cityCenter, cityZoom)
     instance.current = map
     map.attributionControl.setPrefix(false)
-    for (const [name, zIndex] of [["heat", 380], ["context", 410], ["trees", 420]] as const) {
+    for (const [name, zIndex] of [["heat", 380], ["context", 410], ["trees", 420], ["plantings", 425]] as const) {
       map.createPane(name).style.zIndex = String(zIndex)
     }
+    map.getPane("plantings")?.style.setProperty("pointer-events", "none")
     const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       className: "city-basemap",
       maxNativeZoom: 19,
@@ -245,26 +258,51 @@ export default function CityMap({ heat, trees, context, air, locations, selected
 
   useEffect(() => {
     const map = instance.current
-    if (!map || !trees || !(showCanopy || showPlantings)) return
+    if (!map || !trees || !showCanopy) return
     const renderer = L.canvas({ pane: "trees" })
     const layer = L.geoJSON(trees, {
       pane: "trees",
+      filter: (feature) => feature.properties?.kind === "canopy" && canopyOf(feature) !== null,
+      style: (feature) => {
+        const percent = canopyOf(feature) ?? 0
+        const band = canopyBands.find(({ below }) => percent < below) ?? canopyBands[0]
+        return {
+          renderer, color: band.color, weight: percent >= 15 ? 0.6 : 0,
+          fillColor: band.color, fillOpacity: percent === 0 ? 0 : band.opacity,
+        }
+      },
+      onEachFeature: (feature, shape) => {
+        const percent = canopyOf(feature)
+        if (percent === null) return
+        const label = `Δενδροκάλυψη κελιού · ${numeric(percent)}%${canopyPeriod ? ` (${canopyPeriod})` : ""}`
+        shape.bindTooltip(tooltip(label), { sticky: true, direction: "top" })
+        shape.bindPopup(tooltip(label))
+      },
+    }).addTo(map)
+    return () => { layer.remove(); renderer.remove() }
+  }, [trees, showCanopy, canopyPeriod])
+
+  useEffect(() => {
+    const map = instance.current
+    if (!map || !trees || !showPlantings) return
+    const renderer = L.canvas({ pane: "plantings" })
+    const layer = L.geoJSON(trees, {
+      pane: "plantings",
       interactive: false,
-      filter: (feature) => !!feature.geometry && (feature.geometry.type === "Point" ? showPlantings : showCanopy),
-      style: { renderer, color: "#217258", weight: 0.6, fillColor: "#46a973", fillOpacity: 0.4 },
+      filter: (feature) => feature.geometry?.type === "Point" && feature.properties?.kind === "planting",
       pointToLayer: (_, latlng) => L.circleMarker(latlng, {
-        pane: "trees",
+        pane: "plantings",
         renderer,
-        radius: 1.5,
-        color: "#1c624d",
-        fillColor: "#419960",
-        fillOpacity: 0.7,
-        weight: 0.5,
+        radius: 2.1,
+        color: "#0d613d",
+        fillColor: "#58ca71",
+        fillOpacity: 0.92,
+        weight: 0.9,
         interactive: false,
       }),
     }).addTo(map)
     return () => { layer.remove(); renderer.remove() }
-  }, [trees, showCanopy, showPlantings])
+  }, [trees, showPlantings])
 
   useEffect(() => {
     const map = instance.current
@@ -468,6 +506,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
             <p className="air-layer-status" role="status">{air === undefined ? "Φόρτωση μετρήσεων…" : "Δεν υπάρχουν διαθέσιμες μετρήσεις."}</p>
           )}
           <label><input type="checkbox" checked={showCanopy} onChange={(event) => setShowCanopy(event.target.checked)} /> Δενδροκάλυψη</label>
+          {showCanopy && <p className={styles.canopyHint}>Πάτησε ένα κελί για το ποσοστό κάλυψης.</p>}
           <label><input type="checkbox" checked={showPlantings} onChange={(event) => setShowPlantings(event.target.checked)} /> Καταγραφές φύτευσης</label>
           <label><input type="checkbox" checked={showParks} onChange={(event) => setShowParks(event.target.checked)} /> Πάρκα τσέπης</label>
           <label><input type="checkbox" checked={showSchools} onChange={(event) => setShowSchools(event.target.checked)} /> Δημόσια σχολεία</label>
@@ -476,7 +515,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       {(!tilesAvailable || !heat) && (
         <div className="tile-status">{!heat ? "Φόρτωση ή απουσία θερμικού επιπέδου" : "Το βασικό υπόβαθρο δεν είναι διαθέσιμο"}</div>
       )}
-      <div className="map-legend">
+      <div className={`map-legend${showCanopy ? ` ${styles.combinedLegend}` : ""}`}>
         {showHeat && (
           <div>
             <strong>Θερμοκρασία επιφάνειας (°C)</strong>
@@ -490,9 +529,18 @@ export default function CityMap({ heat, trees, context, air, locations, selected
             </div>
           </div>
         )}
+        {showCanopy && (
+          <div className={styles.canopyLegend}>
+            <strong>Δενδροκάλυψη{canopyPeriod ? ` · ${canopyPeriod}` : ""}</strong>
+            <div className="legend-bands">
+              {canopyBands.map(({ label, color }) => (
+                <div key={label}><span style={{ background: color }} />{label}</div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className={`legend-features ${styles.legendFeatures}`}>
           {showAir && !!air?.readings.length && <span><i className="legend-swatch legend-swatch--air" /> Θερμοκρασία αέρα</span>}
-          {showCanopy && <span><i className="legend-swatch legend-swatch--trees" /> Δενδροκάλυψη</span>}
           {showPlantings && <span><i className="legend-swatch legend-swatch--planting" /> Καταγραφές φύτευσης</span>}
           {showParks && <span><i className="legend-swatch legend-swatch--park" /> Πάρκο τσέπης</span>}
           {showSchools && <span><i className="legend-swatch legend-swatch--schools" /> Δημόσια σχολεία</span>}

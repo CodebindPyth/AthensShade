@@ -33,6 +33,28 @@
   display: none;
 }
 
+.canopyHint {
+  max-width: 180px;
+  margin: 1px 0 4px 23px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.canopyLegend :global(.legend-bands) {
+  grid-template-columns: repeat(4, minmax(32px, 1fr));
+}
+
+.combinedLegend {
+  flex-wrap: wrap;
+  max-width: calc(100% - 24px);
+}
+
+@media (max-width: 520px) {
+  .canopyLegend :global(.legend-bands) {
+    grid-template-columns: repeat(4, minmax(25px, 1fr));
+  }
+}
+
 .treePopup {
   position: absolute;
   z-index: 560;
