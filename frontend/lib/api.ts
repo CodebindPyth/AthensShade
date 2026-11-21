@@ -97,6 +97,19 @@ export type Plan = Scenario & {
   thermal_impact?: ThermalImpact[]
 }
 export type Comparison = { baseline: Plan; proposed: Plan; added_ids: string[]; removed_ids: string[]; retained_ids: string[] }
+export type AiBriefResponse = {
+  source: "hosted_model" | "verified_template"
+  model: string | null
+  summary: string
+  priorities: string[]
+  next_step: string
+  evidence: { title: string; url: string }[]
+  availability: "available" | "not_configured" | "provider_unavailable"
+}
+export type EvidenceSearchResponse = {
+  method: "semantic" | "keywords"
+  results: { title: string; description: string; url: string }[]
+}
 export type FinancialAssumptions = {
   annual_savings_eur: number
   annual_maintenance_eur: number
@@ -127,6 +140,9 @@ export const api = {
   layer: (layer: LayerName, signal?: AbortSignal) => request<FeatureCollection>(`/layers/${layer}`, { signal }),
   analysis: (id: string, signal?: AbortSignal) => request<Analysis>(`/locations/${encodeURIComponent(id)}/analysis`, { signal }),
   optimize: (scenario: Scenario, signal?: AbortSignal) => post<Plan>("/optimize", scenario, signal),
+  aiBrief: (scenario: Scenario, signal?: AbortSignal) => post<AiBriefResponse>("/ai-brief", scenario, signal),
+  searchEvidence: (query: string, signal?: AbortSignal) =>
+    post<EvidenceSearchResponse>("/evidence-search", { query }, signal),
   compare: (baseline: Scenario, proposed: Scenario) => post<Comparison>("/scenarios/compare", { baseline, proposed }),
   appraise: (scenario: Scenario, assumptions: FinancialAssumptions, signal?: AbortSignal, interventionType?: string) =>
     post<FinancialAppraisal>("/investment-appraisal", { scenario, assumptions, intervention_type: interventionType }, signal),

@@ -1,0 +1,58 @@
+.panel {
+  margin-top: 22px;
+  padding: 18px 23px;
+  scroll-margin-top: 14px;
+  color: var(--body);
+  overflow-wrap: anywhere;
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink);
+  font-size: clamp(19px, 2vw, 23px);
+}
+
+.heading svg { flex: 0 0 auto; color: var(--blue); }
+.hint, .status { color: var(--muted); font-size: 13px; }
+.panel > .hint { margin-top: 7px; }
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-top: 11px;
+}
+
+.actions .action {
+  width: auto;
+  min-height: 40px;
+  padding: 7px 12px;
+  font-size: 14px;
+}
+
+.error { margin-top: 9px; color: #a52a35; }
+
+.result {
+  display: grid;
+  gap: 5px;
+  margin-top: 13px;
+  padding: 12px 14px;
+  border-radius: 7px;
+  background: var(--blue-soft);
+  font-size: 14px;
+}
+
+.origin { color: var(--blue-deep); font-size: 12px; font-weight: 700; }
+.summary { margin-top: 3px; }
+.result h3 { margin: 5px 0 0; color: var(--ink); font-size: 14px; }
+.priorities { padding-left: 20px; list-style: disc; }
+.priorities li + li, .sources li + li { margin-top: 4px; }
+.sources a { color: var(--blue-deep); text-underline-offset: 2px; }
+.sources svg { vertical-align: -1px; }
+
+@media (max-width: 760px) {
+  .panel { padding: 16px; }
+}

@@ -80,7 +80,10 @@ export function Planner(props: PlannerProps) {
             )}
             {plan.selected.length > 0 && Boolean(plan.shade_impact || plan.greened_roof_area_m2) && <ImpactCard plan={plan} />}
             {plan.selected.length > 0 && !props.isStale && (
-              <a className="impact-evaluation-link" href="#investment-appraisal">Εκτίμηση ψύξης και απόσβεσης ↓</a>
+              <nav aria-label="Ανάλυση πλάνου" className="plan-detail-links">
+                <a className="impact-evaluation-link" href="#city-brief">Σύνοψη για τον Δήμο ↓</a>
+                <a className="impact-evaluation-link" href="#investment-appraisal">Εκτίμηση ψύξης και απόσβεσης ↓</a>
+              </nav>
             )}
             {plan.selected.length === 0 ? (
               <div className="plan-empty">

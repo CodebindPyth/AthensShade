@@ -311,3 +311,16 @@ def test_financial_appraisal_uses_selected_type_and_optional_municipal_quote(cli
 
     request["intervention_type"] = "green_roof"
     assert client.post("/api/investment-appraisal", json=request).status_code == 422
+
+
+def test_city_brief_is_grounded_in_the_same_optimized_plan(data: dict, tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    with app_for(data, tmp_path) as client:
+        response = client.post("/api/ai-brief", json={"budget_eur": 50_000})
+        assert response.status_code == 200
+        brief = response.json()
+        assert brief["availability"] == "not_configured"
+        assert brief["source"] == "verified_template"
+        assert "48.000" in brief["summary"]
+        assert brief["priorities"] and brief["next_step"] and brief["evidence"]
+        assert client.post("/api/ai-brief", json={"budget_eur": 0}).status_code == 422

@@ -5,6 +5,8 @@ import { ChevronRight, CircleAlert, Database, ExternalLink, MapPin, Sunrise, X }
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { FormEvent } from "react"
 import type { TileSelection } from "../components/city-map"
+import { AiBrief } from "../components/ai-brief"
+import { EvidenceSearch } from "../components/evidence-search"
 import { InvestmentPanel } from "../components/investment-panel"
 import { MicroclimateMonitor } from "../components/microclimate-monitor"
 import { Planner } from "../components/planner"
@@ -264,10 +266,12 @@ export default function AthensShade() {
             treeThreshold={dataset?.tree_deficit_threshold_percent}
           />
         )}
+        <AiBrief plan={plan} isStale={isStale} />
         <InvestmentPanel plan={plan} isStale={isStale} locations={locationById} comparison={currentComparison} />
         <MicroclimateMonitor />
         <section className="panel sources" id="sources" aria-labelledby="sources-title">
           <div className="sources-heading"><h2 id="sources-title">Πηγές δεδομένων</h2>{dataset && <small>{dataset.dataset_version}</small>}</div>
+          <EvidenceSearch />
           {sources.length > 0 ? (
             <ul>
               {sources.map((source) => (

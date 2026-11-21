@@ -112,6 +112,7 @@ input[type="checkbox"] { flex: 0 0 auto; margin: 0; height: 18px; width: 18px; a
 .legend-swatch--trees { background: #66af85; }
 .legend-swatch--air { background: #edfaff; border: 1px solid #14648b; }
 .legend-swatch--park { background: #236840; }
+.plan-detail-links { display: flex; flex-wrap: wrap; gap: 0 12px; }
 .impact-evaluation-link {
   display: inline-block;
   margin: 9px 0 3px;

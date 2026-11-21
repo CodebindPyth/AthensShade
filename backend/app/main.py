@@ -7,10 +7,12 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, StringConstraints, ValidationError
 
+from .ai_brief import BriefEditor, CityBrief
 from .air import AIR_SOURCE, AirFeed, AirResponse
 from .analysis import TREE_DEFICIT_THRESHOLD_PERCENT, AthensAnalysis
+from .brief_evidence import build_brief_evidence
 from .investment import AppraiseRequest, FinancialAppraisal, appraise_investment
 from .methodology import methodology
 from .models import (
@@ -27,9 +29,21 @@ from .models import (
     SourcesResponse,
 )
 from .optimizer import OptimizationError, optimize
+from .semantic import ModelUnavailable, SemanticResult, keyword_search, semantic_search
 
 DEFAULT_DATASET_PATH = Path(__file__).resolve().parents[2] / "data" / "processed" / "athens.json"
 LOGGER = logging.getLogger(__name__)
+
+
+class EvidenceQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=300)]
+
+
+class EvidenceSearchResponse(BaseModel):
+    method: Literal["semantic", "keywords"]
+    results: list[SemanticResult]
 
 
 @lru_cache(maxsize=4)
@@ -58,6 +72,7 @@ def create_app(dataset_path: Path | None = None) -> FastAPI:
     path = dataset_path or Path(os.getenv("ATHENSSHADE_DATA_PATH", str(DEFAULT_DATASET_PATH)))
     api = APIRouter(prefix="/api")
     air_feed = AirFeed()
+    brief_editor = BriefEditor(os.getenv("GROQ_API_KEY"))
 
     def dataset_analysis() -> AthensAnalysis:
         try:
@@ -116,6 +131,13 @@ def create_app(dataset_path: Path | None = None) -> FastAPI:
     def planning_methodology() -> MethodologyResponse:
         return methodology()
 
+    @api.post("/evidence-search", tags=["Map"])
+    def evidence_search(request: EvidenceQuery) -> EvidenceSearchResponse:
+        try:
+            return EvidenceSearchResponse(method="semantic", results=semantic_search(request.query))
+        except ModelUnavailable:
+            return EvidenceSearchResponse(method="keywords", results=keyword_search(request.query))
+
     def get_plan(analysis: AthensAnalysis, request: OptimizeRequest) -> Plan:
         try:
             return optimize(analysis, request)
@@ -126,6 +148,15 @@ def create_app(dataset_path: Path | None = None) -> FastAPI:
     @api.post("/optimize", tags=["Planning"])
     def plan(request: OptimizeRequest, analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)]) -> Plan:
         return get_plan(analysis, request)
+
+    @api.post("/ai-brief", tags=["Planning"])
+    def city_brief(
+        request: OptimizeRequest, analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)],
+    ) -> CityBrief:
+        plan = get_plan(analysis, request)
+        if not plan.selected:
+            raise HTTPException(status_code=422, detail="Υπολόγισε πρώτα ένα πλάνο με παρεμβάσεις.")
+        return brief_editor.edit(build_brief_evidence(plan, analysis), plan.strategy)
 
     @api.post("/investment-appraisal", tags=["Planning"])
     def investment_appraisal(
