@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowDownUp, CheckCircle2, CircleAlert, FileText, House, MapPin, Minus, Plus, ShieldCheck, TreeDeciduous } from "lucide-react"
+import { ArrowDownUp, CheckCircle2, CircleAlert, FileText, House, MapPin, Minus, Plus, ShieldCheck, Thermometer, TreeDeciduous } from "lucide-react"
 import type { FormEvent } from "react"
 import type { Comparison, Location, Plan, Strategy } from "../lib/api"
 import { euros, feasibilityLabel, interventionLabel, shadeArea } from "../lib/format"
@@ -20,6 +20,8 @@ type PlannerProps = {
   plan: Plan | null
   comparison: Comparison | null
   isStale: boolean
+  showImpact: boolean
+  onToggleImpact: () => void
   compareOpen: boolean
   baseline: string
   setBaseline: (budget: string) => void
@@ -78,6 +80,18 @@ export function Planner(props: PlannerProps) {
               <p className="notice notice--inspection"><CircleAlert size={17} /> Demo για {euros(plan.budget_eur)}. Οι θέσεις προς αυτοψία χρειάζονται επιτόπια επιβεβαίωση.</p>
             ) : (
               <p className="verified-label"><ShieldCheck size={16} /> Επιβεβαιωμένες θέσεις</p>
+            )}
+            {plan.selected.length > 0 && !props.isStale && (
+              <button
+                type="button"
+                className="outline-button impact-map-toggle"
+                aria-pressed={props.showImpact}
+                aria-controls="city-map-preview"
+                disabled={props.busy}
+                onClick={props.onToggleImpact}
+              >
+                <Thermometer size={17} aria-hidden="true" /> Αντίκτυπος στον χάρτη
+              </button>
             )}
             {plan.selected.length > 0 && Boolean(plan.shade_impact || plan.greened_roof_area_m2) && <ImpactCard plan={plan} />}
             {plan.selected.length > 0 && !props.isStale && (

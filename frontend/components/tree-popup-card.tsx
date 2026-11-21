@@ -43,7 +43,9 @@ export function TreePopupCard({ location, plan }: TreePopupCardProps) {
         )}
       </dl>
       <ul className={styles.actions} aria-label="Προτεινόμενες παρεμβάσεις">
-        {interventions.map((item) => (
+        {interventions.map((item) => {
+          const benefit = brief?.savings?.items.find((entry) => entry.intervention_id === item.id)?.benefit
+          return (
           <li key={item.id}>
             <div className={styles.actionTitle}>
               <strong>{interventionLabel(item.type)}</strong>
@@ -58,8 +60,10 @@ export function TreePopupCard({ location, plan }: TreePopupCardProps) {
                 {item.shade_impact.horizon === "at_tree_maturity" ? " σε ώριμη κόμη" : " μετά την εγκατάσταση"}
               </p>
             )}
+            {benefit && <p className={styles.benefit}>{benefit}</p>}
           </li>
-        ))}
+          )
+        })}
       </ul>
       <div className={styles.assessment} aria-live="polite">
         {brief ? <SiteAssessment brief={brief} /> : (

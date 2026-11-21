@@ -32,6 +32,7 @@
 .assessment { background: var(--blue-soft); border-radius: 5px; padding: 6px 7px; }
 .card .origin { color: var(--blue-deep); font-size: 11px; font-weight: 700; margin: 0; display: flex; gap: 4px; align-items: center; }
 .card .guidance { margin: 3px 0 0; }
+.card .benefit { margin: 5px 0 0; color: #215743; }
 .finance { border-top: 1px solid var(--line); margin-top: 5px; padding-top: 5px; }
 .card .savingsFigure { margin: 2px 0 0; font-weight: 700; color: var(--ink); }
 .details { margin-top: 3px; color: var(--muted); font-size: 11px; }

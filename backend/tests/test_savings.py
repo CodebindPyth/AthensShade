@@ -36,6 +36,11 @@ def test_savings_scale_with_selected_interventions() -> None:
     assert tree.net_annual_eur == -tree.annual_maintenance_eur
     assert "1.200 €" in tree.assumptions[0]
     assert "ώριμη κόμη" in tree.assumptions[0]
+    assert tree.benefit and "ψύξης" in tree.benefit
+    bench = next(row for row in larger.items if row.type == "shaded_bench")
+    assert bench.benefit and "υπεριώδη" in bench.benefit
+    shelter = next(row for row in larger.items if row.type == "shade_structure")
+    assert shelter.benefit and "εξοπλισμό" in shelter.benefit
 
 
 def test_savings_uses_same_site_figures_on_map_card(monkeypatch) -> None:

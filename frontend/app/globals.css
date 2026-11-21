@@ -113,6 +113,8 @@ input[type="checkbox"] { flex: 0 0 auto; margin: 0; height: 18px; width: 18px; a
 .legend-swatch--air { background: #edfaff; border: 1px solid #14648b; }
 .legend-swatch--park { background: #236840; }
 .plan-detail-links { display: flex; flex-wrap: wrap; gap: 0 12px; }
+.impact-map-toggle { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin: 10px 0; }
+.impact-map-toggle[aria-pressed="true"] { background: #e7f4f1; color: #14564d; border-color: #328476; }
 .impact-evaluation-link {
   display: inline-block;
   margin: 9px 0 3px;

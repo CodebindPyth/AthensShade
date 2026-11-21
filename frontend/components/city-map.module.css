@@ -116,3 +116,62 @@
   border-radius: inherit;
   padding: 10px;
 }
+
+.mapCanvas .impactLabel {
+  display: grid;
+  place-items: center;
+  border: 1px solid #42839a;
+  border-radius: 5px;
+  background: #ecf9fc;
+  color: #0c5367;
+  font: 700 11px/1.2 system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  box-shadow: 0 2px 5px #17384c37;
+  cursor: pointer;
+}
+
+.mapCanvas .impactUnknown {
+  border: 1px dashed #6b7a90;
+  background: #f5f7fa;
+  color: #405269;
+}
+
+.mapCanvas .impactLabel:hover,
+.mapCanvas .impactLabel:focus-visible {
+  outline: 2px solid #17576d;
+  outline-offset: 2px;
+}
+
+.impactLegend {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.impactLegend i {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  margin-top: 2px;
+  border: 1px solid #176d87;
+  background: #176d8734;
+}
+
+.impactLegend span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.impactDetail {
+  margin: 0 0 7px;
+  padding: 6px 33px 6px 7px;
+  border-radius: 5px;
+  background: #ebf7fb;
+  color: #174c5c;
+  font: 11px/1.35 system-ui, sans-serif;
+}
+
+.impactDetail p { margin: 3px 0; }
+.impactDetail a { color: #07536e; text-underline-offset: 2px; }

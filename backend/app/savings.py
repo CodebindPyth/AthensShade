@@ -16,6 +16,7 @@ class SavingsItem(BaseModel):
     annual_maintenance_eur: float
     net_annual_eur: float
     assumptions: list[str]
+    benefit: str | None = None
 
 
 class SavingsScenario(BaseModel):
@@ -31,6 +32,26 @@ ENERGY_EUR_PER_KWH = Decimal("0.20")
 SEASONAL_RENTAL_PER_SHELTER_EUR = Decimal(4800)
 SEASONAL_SETUP_PER_BENCH_EUR = Decimal(500)
 MAINTENANCE_FRACTION = Decimal("0.02")
+
+_LOCAL_BENEFITS: dict[InterventionType, str] = {
+    "tree_planting": (
+        "Η ώριμη κόμη δροσίζει τοπικά και, αν σκιάζει κλιματιζόμενο δημοτικό κτίριο, "
+        "μπορεί να μειώσει την κατανάλωση ψύξης το καλοκαίρι."
+    ),
+    "shade_structure": (
+        "Το μόνιμο σκίαστρο περιορίζει την άμεση έκθεση στον ήλιο για τους πεζούς και τον "
+        "εξοπλισμό από κάτω. Αν καλύπτει την ίδια ανάγκη, μπορεί να αντικαταστήσει την προσωρινή σκίαση."
+    ),
+    "shaded_bench": (
+        "Η μικρότερη έκθεση στην υπεριώδη ακτινοβολία μπορεί να επιβραδύνει το ξεθώριασμα "
+        "και τη φθορά του φινιρίσματος στο παγκάκι."
+    ),
+    "green_roof": (
+        "Το φυτεμένο δώμα μπορεί να μειώσει τη ζέστη που περνά από την οροφή "
+        "και τις ανάγκες καλοκαιρινής ψύξης του κτιρίου."
+    ),
+    "greenery": "Η βλάστηση μπορεί να βελτιώσει το μικροκλίμα μέσω σκιάς και εξατμισοδιαπνοής.",
+}
 
 
 def _cents(value: Decimal) -> Decimal:
@@ -90,6 +111,7 @@ def calculate_savings(interventions: list[ExplainedIntervention]) -> SavingsScen
             annual_maintenance_eur=float(maintenance),
             net_annual_eur=float(gross - maintenance),
             assumptions=[assumption, "Υποθέτουμε πρόσθετη ετήσια συντήρηση ίση με 2% του αρχικού κόστους."],
+            benefit=_LOCAL_BENEFITS.get(intervention.type),
         ))
 
     return SavingsScenario(

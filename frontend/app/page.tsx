@@ -40,6 +40,7 @@ export default function AthensShade() {
   const [includeInspection, setIncludeInspection] = useState(true)
   const [strategy, setStrategy] = useState<Strategy>("shade_and_rest")
   const [plan, setPlan] = useState<Plan | null>(null)
+  const [impactPlan, setImpactPlan] = useState<Plan | null>(null)
   const [busy, setBusy] = useState(false)
   const [planError, setPlanError] = useState<string | null>(null)
   const [compareOpen, setCompareOpen] = useState(false)
@@ -164,6 +165,7 @@ export default function AthensShade() {
   const currentAnalysis = analysis?.location.id === selectedId ? analysis : null
   const isStale = plan !== null && (parseBudget(budget) !== plan.budget_eur || includeInspection !== plan.include_inspection || strategy !== plan.strategy)
   const mappedPlan = isStale || busy ? null : plan
+  const showImpact = mappedPlan !== null && impactPlan === mappedPlan
   const selectedHasTree = mappedPlan?.selected.some((item) => item.location_id === selectedId)
   const currentComparison = comparison?.baseline.budget_eur === parseBudget(baseline)
     && comparison.proposed.budget_eur === parseBudget(budget)
@@ -191,13 +193,14 @@ export default function AthensShade() {
         {dataError && <p className="data-notice" role="alert"><CircleAlert size={17} /> {dataError} <button type="button" onClick={() => setRetryCount((count) => count + 1)}>Δοκίμασε ξανά</button></p>}
         <div className="workspace-grid">
           <section className="map-column" aria-label="Χάρτης θερμοκρασίας επιφάνειας και θέσεων">
-            <div className="map-shell">
+            <div className="map-shell" id="city-map-preview">
               <CityMap
                 {...layers}
                 air={air}
                 locations={locations}
                 selectedId={selectedId}
                 plan={mappedPlan}
+                showImpact={showImpact}
                 hotspotThreshold={dataset?.heat_hotspot_threshold_c}
                 canopyPeriod={canopyPeriod}
                 onSelectTile={onSelectTile}
@@ -244,6 +247,14 @@ export default function AthensShade() {
             setIncludeInspection={setIncludeInspection} busy={busy} comparisonBusy={comparisonBusy}
             error={planError} comparisonError={comparisonError} plan={plan} comparison={currentComparison}
             isStale={isStale} compareOpen={compareOpen} toggleCompare={() => setCompareOpen(!compareOpen)}
+            showImpact={showImpact} onToggleImpact={() => {
+              if (!mappedPlan) return
+              setImpactPlan(showImpact ? null : mappedPlan)
+              const map = document.getElementById("city-map-preview")
+              if (!showImpact && map && map.getBoundingClientRect().bottom < 100) {
+                map.scrollIntoView({ block: "start" })
+              }
+            }}
             baseline={baseline} setBaseline={setBaseline} locations={locationById}
             onSelectLocation={(id) => { onSelectLocation(id); setFocusAnalysis(true) }}
             onCalculate={calculate} onCompare={compare}

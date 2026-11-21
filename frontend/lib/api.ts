@@ -120,6 +120,7 @@ export type SavingsItem = SavingsAmounts & {
   location_id: string
   type: string
   assumptions: string[]
+  benefit?: string | null
 }
 export type SavingsEstimate = SavingsAmounts & {
   source: "hypothetical_scenario"

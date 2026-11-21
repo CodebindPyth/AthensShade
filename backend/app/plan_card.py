@@ -25,6 +25,8 @@ _ACTION_GUIDANCE: dict[InterventionType, tuple[Option, ...]] = {
          "Προϋπολόγισε πότισμα και φροντίδα μέχρι να εδραιωθούν τα δέντρα και να αναπτύξουν κόμη."),
         ("tree_savings", "Check whether mature trees replace an existing spending item before counting savings",
          "Όταν ωριμάσουν τα δέντρα, έλεγξε αν η σκιά τους καταργεί κάποια καταγεγραμμένη δημοτική δαπάνη."),
+        ("tree_energy", "Verify summer cooling use before and after a mature tree canopy actually shades a cooled municipal building",
+         "Αν η ώριμη κόμη σκιάζει κλιματιζόμενο δημοτικό κτίριο, σύγκρινε τις θερινές καταναλώσεις με παρόμοιο καιρό και χρήση."),
     ),
     "green_roof": (
         ("structure", "Obtain roof structural load and waterproofing assessments",
@@ -39,6 +41,8 @@ _ACTION_GUIDANCE: dict[InterventionType, tuple[Option, ...]] = {
          "Ζήτησε κόστος συντήρησης και αντικατάστασης του σκιάστρου για τον οικονομικό υπολογισμό."),
         ("shade_rental", "Compare existing rental invoices with the scope of the permanent shelter",
          "Σύγκρινε τα τιμολόγια προσωρινής σκίασης με όσα καλύπτει το νέο σκίαστρο στην ίδια θέση."),
+        ("shade_materials", "Check which equipment the shelter protects from direct sun and whether maintenance needs fall",
+         "Έλεγξε ποιος εξοπλισμός σκιάζεται στις ώρες αιχμής και κατέγραψε αν μειώνονται οι εργασίες συντήρησής του."),
     ),
     "shaded_bench": (
         ("access", "Check step-free access and space beside the bench",
@@ -47,6 +51,8 @@ _ACTION_GUIDANCE: dict[InterventionType, tuple[Option, ...]] = {
          "Επαλήθευσε ότι το σκίαστρο καλύπτει τα καθίσματα στις θερμότερες ώρες."),
         ("bench_setup", "Identify existing temporary seating or shade setup spending the bench would replace",
          "Έλεγξε αν το παγκάκι αντικαθιστά έξοδα που ήδη πληρώνει ο Δήμος για προσωρινά καθίσματα και σκίαση."),
+        ("bench_wear", "Compare surface wear and maintenance records for identical seats with and without UV protection",
+         "Σύγκρινε τη φθορά και τις επαναβαφές σε όμοια παγκάκια με διαφορετική έκθεση στον ήλιο."),
     ),
     "greenery": (
         ("water", "Verify drainage and irrigation supply on site",
