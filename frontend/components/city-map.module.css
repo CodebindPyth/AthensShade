@@ -24,6 +24,20 @@
   outline-offset: 2px;
 }
 
+.mapCanvas .pinCount {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  min-width: 16px;
+  padding: 2px 3px;
+  border: 1px solid #fff;
+  border-radius: 999px;
+  background: #164b37;
+  color: #fff;
+  font: 750 9px/1 system-ui, sans-serif;
+  text-align: center;
+}
+
 .legendPin {
   display: grid;
   width: 17px;
@@ -137,8 +151,26 @@
   color: #405269;
 }
 
-.mapCanvas .impactLabel div { display: grid; gap: 2px; text-align: center; }
+.mapCanvas .impactLabel div { display: grid; gap: 3px; text-align: center; }
 .mapCanvas .impactLabel span + span { color: #22546a; font-size: 10px; }
+.mapCanvas .impactLabel span:nth-child(2) { font-weight: 800; }
+
+.mapCanvas .neighborhoodName span {
+  display: block;
+  width: max-content;
+  max-width: 150px;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font: 750 11px/1.1 system-ui, sans-serif;
+  letter-spacing: 0.015em;
+  text-align: center;
+  text-shadow: 0 1px 2px #2a1018, 1px 0 #542332, -1px 0 #542332, 0 -1px #542332;
+  pointer-events: none;
+}
+
+.mapCanvas .unitPin { color: #145a43; background: #fff; border: 1px solid #395949; border-radius: 50%; }
+.mapCanvas .unitPin svg { display: block; width: 100%; height: 100%; }
+.mapCanvas .treePin[hidden] { display: none; }
 
 .mapCanvas .impactLabel:hover,
 .mapCanvas .impactLabel:focus-visible {
@@ -177,5 +209,6 @@
 }
 
 .impactDetail p { margin: 3px 0; }
+.impactDetail .impactUnits { color: #165647; font-weight: 800; }
 .impactDetail .impactArea { font-weight: 700; }
 .impactDetail a { color: #07536e; text-underline-offset: 2px; }

@@ -132,11 +132,20 @@ class LocalPlanCardEditor:
             for key, label, text in (*_ACTION_GUIDANCE[item.type], context)
         }
         siting_checks = [item.siting for item in items if item.siting and item.siting.get("status") == "candidate"]
+        checks = []
         if siting_checks:
             options["pedestrian_check"] = (
                 "Verify pedestrian clear passage and buried utilities at the GIS-screened placement",
                 "Μέτρησε την ελεύθερη όδευση στην προελεγμένη θέση και έλεγξε τα υπόγεια δίκτυα πριν οριστεί η εγκατάσταση.",
             )
+            for check in siting_checks:
+                evidence = check.get("evidence") or {}
+                checks.append({
+                    "mapped_space": evidence.get("mapped_space"),
+                    "road_axis_distance_m": evidence.get("road_distance_m"),
+                    "edge_clearance_m": evidence.get("edge_clearance_m"),
+                    "candidate_placements": len(check.get("anchors", [])),
+                })
         if any((check.get("evidence") or {}).get("constraint_note") for check in siting_checks):
             options["structural_constraint"] = (
                 "Check structural capacity and permitted mounting above the documented underground structure",
@@ -151,6 +160,7 @@ class LocalPlanCardEditor:
             "goal": strategy,
             "actions": sorted({item.type for item in items}),
             "screened_public_space": bool(siting_checks),
+            "gis_siting": checks,
         }, ensure_ascii=False)
         choice = self._choose(scenario, tuple((key, value[0]) for key, value in options.items()))
 

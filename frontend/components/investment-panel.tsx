@@ -26,7 +26,6 @@ export function CoolingEstimates({ plan, isStale = false, locations }: Pick<Inve
           {activePlan.thermal_impact.map((item) => <ThermalRow key={item.type} item={item} locations={locations} />)}
         </ul>
       ) : <p className={styles.empty}>Υπολόγισε ένα πλάνο για να δεις τα διαθέσιμα θερμικά σενάρια.</p>}
-      <a className={styles.measurementLink} href="#microclimate-monitor">Αποτίμηση με μετρήσεις πριν και μετά</a>
     </section>
   )
 }
@@ -48,7 +47,7 @@ export function InvestmentPanel({ plan, isStale = false, locations }: Investment
         />
       ) : (
         <p className={styles.empty}>
-          {isStale ? "Υπολόγισε ξανά το πλάνο για να ενημερωθεί η εξοικονόμηση." : "Υπολόγισε ένα πλάνο για να δεις το υποθετικό σενάριο εξοικονόμησης."}
+          {isStale ? "Υπολόγισε ξανά το πλάνο για να ενημερωθεί η εξοικονόμηση." : plan ? "Το πλάνο περιλαμβάνει 0 παρεμβάσεις. Η εκτιμώμενη μείωση δαπανών είναι 0 € ανά έτος." : "Υπολόγισε ένα πλάνο για να δεις την εκτίμηση εξοικονόμησης."}
         </p>
       )}
     </section>
@@ -72,7 +71,7 @@ function PlanSavings({ plan, locations }: { plan: Plan; locations?: Map<string, 
   const yearly = (amount: number) => euros(amount) + " / έτος"
   return (
     <div className={styles.savingsBody}>
-      <p className={styles.scenario}>Υποθετικό σενάριο · Demo</p>
+      <p className={styles.scenario}>Εκτίμηση ετήσιας λειτουργίας</p>
       {failed ? (
         <p className={styles.error} role="alert">
           Η εκτίμηση εξοικονόμησης δεν είναι διαθέσιμη.{" "}
@@ -87,7 +86,7 @@ function PlanSavings({ plan, locations }: { plan: Plan; locations?: Map<string, 
         <>
           <dl className={styles.savingsMetrics} aria-label="Ετήσια σύνολα εξοικονόμησης">
             <div>
-              <dt>Μείωση ετήσιων δαπανών</dt>
+              <dt>Δυνητική μείωση δαπανών του Δήμου</dt>
               <dd>{yearly(estimate.gross_annual_eur)}</dd>
             </div>
             <div>
@@ -95,11 +94,11 @@ function PlanSavings({ plan, locations }: { plan: Plan; locations?: Map<string, 
               <dd>{yearly(estimate.annual_maintenance_eur)}</dd>
             </div>
             <div data-net={estimate.net_annual_eur >= 0 ? "saving" : "cost"}>
-              <dt>{estimate.net_annual_eur >= 0 ? "Καθαρή εξοικονόμηση" : "Καθαρή επιβάρυνση"}</dt>
-              <dd>{yearly(Math.abs(estimate.net_annual_eur))}</dd>
+              <dt>Καθαρό ετήσιο αποτέλεσμα Δήμου</dt>
+              <dd>{estimate.net_annual_eur > 0 ? "+" : ""}{yearly(estimate.net_annual_eur)}</dd>
             </div>
           </dl>
-          <p className={styles.note}>Τα ποσά ισχύουν μόνο με τις παραδοχές του demo. Ο Δήμος μπορεί να τα ελέγξει με μετρητές, λογαριασμούς και συμβάσεις προμηθειών.</p>
+          <p className={styles.note}>Το ετήσιο αποτέλεσμα αφαιρεί τη συντήρηση από τις δυνητικές μειώσεις δαπανών. Η αρχική επένδυση εμφανίζεται στο πλάνο. Για τα δέντρα η εκτίμηση αφορά την ώριμη κόμη. Ο Δήμος μπορεί να ελέγξει τις παραδοχές με θερινούς λογαριασμούς ρεύματος και συμβάσεις.</p>
           <details className={styles.assumptions}>
             <summary>Υποθετικές παραδοχές ανά παρέμβαση</summary>
             <ul>

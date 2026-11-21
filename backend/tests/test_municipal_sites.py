@@ -4,6 +4,19 @@ from app.models import Dataset
 from app.municipal_sites import add_municipal_sites
 
 
+def test_red_public_services_cover_all_categories_and_use_geocoded_references():
+    root = Path(__file__).resolve().parents[2]
+    dataset = Dataset.model_validate_json((root / "data/processed/athens.json").read_text(encoding="utf-8"))
+    result = add_municipal_sites(dataset, 40)
+    public = [location for location in result.locations if location.id.startswith("public-")]
+    assert {location.municipal_asset["kind"] for location in public} == {"police", "fire", "hospital", "kep", "court"}
+    schools = [location for location in result.locations if location.id.startswith("school-atlas-")]
+    assert len(schools) > 10
+    assert all(location.heat_c >= 40 and location.municipal_asset["advisory_only"] for location in public + schools)
+    assert all(location.municipal_asset["coordinates_url"].startswith("https://") for location in public)
+    assert not {location.id for location in public + schools} & {item.location_id for item in result.interventions}
+
+
 def test_municipal_premises_use_documented_hot_cells_without_adding_costed_works():
     root = Path(__file__).resolve().parents[2]
     dataset = Dataset.model_validate_json((root / "data/processed/athens.json").read_text(encoding="utf-8"))

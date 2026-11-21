@@ -4,6 +4,7 @@ import { ArrowDownUp, CheckCircle2, CircleAlert, FileText, Minus, Plus, ShieldCh
 import type { FormEvent } from "react"
 import type { Comparison, Location, Plan, Strategy } from "../lib/api"
 import { euros, feasibilityLabel, interventionLabel, shadeArea } from "../lib/format"
+import { formatBudgetInput, parseBudget } from "../lib/budget"
 import { ImpactCard, ImpactComparison } from "./plan-impact"
 import { InterventionSymbol } from "./intervention-symbol"
 
@@ -33,10 +34,35 @@ type PlannerProps = {
   locations: Map<string, Location>
 }
 
-const budgetPresets = [50_000, 100_000, 150_000]
+const budgetPresets = [50_000, 100_000, 150_000, 250_000, 500_000, 1_000_000]
+
+function BudgetInput({ id, value, onChange }: { id: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <input id={id} type="text" inputMode="decimal" required autoComplete="off" value={value}
+      onChange={(event) => {
+        const field = event.currentTarget
+        const raw = field.value
+        if (!/^[\d.\s]*(?:,\d{0,2})?$/.test(raw)) return
+        const prefix = raw.slice(0, field.selectionStart ?? raw.length).replace(/[.\s]/g, "")
+        const formatted = formatBudgetInput(raw)
+        // Keep the caret beside the edited digit when grouping inserts or removes a dot.
+        let cursor = 0
+        let digits = 0
+        while (cursor < formatted.length && digits < prefix.length) {
+          if (formatted[cursor] !== ".") digits++
+          cursor++
+        }
+        field.value = formatted
+        field.setSelectionRange(cursor, cursor)
+        onChange(formatted)
+      }}
+    />
+  )
+}
 
 export function Planner(props: PlannerProps) {
   const { budget, includeInspection, plan, comparison, locations, onSelectLocation } = props
+  const amount = parseBudget(budget)
   return (
     <aside className="panel planner" aria-labelledby="planner-title">
       <div className="planner-heading">
@@ -46,12 +72,12 @@ export function Planner(props: PlannerProps) {
       <form className="budget-form" onSubmit={props.onCalculate}>
         <label htmlFor="plan-budget">Προϋπολογισμός</label>
         <div className="currency-input">
-          <input id="plan-budget" type="number" inputMode="decimal" min="0" step="0.01" max="100000000" value={budget} onChange={(event) => props.setBudget(event.target.value)} required />
+          <BudgetInput id="plan-budget" value={budget} onChange={props.setBudget} />
           <span aria-hidden="true">€</span>
         </div>
         <div className="budget-presets" aria-label="Προκαθορισμένοι προϋπολογισμοί">
-          {budgetPresets.map((amount) => (
-            <button key={amount} className={Number(budget) === amount ? "preset active" : "preset"} type="button" aria-pressed={Number(budget) === amount} onClick={() => props.setBudget(String(amount))}>{euros(amount)}</button>
+          {budgetPresets.map((preset) => (
+            <button key={preset} className={amount === preset ? "preset active" : "preset"} type="button" aria-pressed={amount === preset} onClick={() => props.setBudget(formatBudgetInput(String(preset)))}>{euros(preset)}</button>
           ))}
         </div>
         <div className="strategy-field">
@@ -78,7 +104,7 @@ export function Planner(props: PlannerProps) {
               <div><span>Υπόλοιπο</span><strong className="remaining">{euros(plan.remaining_budget_eur)}</strong></div>
             </div>
             {plan.include_inspection ? (
-              <p className="notice notice--inspection"><CircleAlert size={17} /> Demo για {euros(plan.budget_eur)}. Οι θέσεις προς αυτοψία χρειάζονται επιτόπια επιβεβαίωση.</p>
+              <p className="notice notice--inspection"><CircleAlert size={17} /> Οι προτεινόμενες θέσεις χρειάζονται επιτόπια επιβεβαίωση.</p>
             ) : (
               <p className="verified-label"><ShieldCheck size={16} /> Επιβεβαιωμένες θέσεις</p>
             )}
@@ -108,7 +134,7 @@ export function Planner(props: PlannerProps) {
                 <p>{plan.status === "no_affordable_interventions" ? "Αύξησε τον προϋπολογισμό για να ελέγξεις τις διαθέσιμες παρεμβάσεις." : plan.include_inspection ? "Δεν υπάρχουν κατάλληλες υποψήφιες παρεμβάσεις στο σύνολο δεδομένων." : "Μπορείς να συμπεριλάβεις θέσεις προς αυτοψία για ένα διερευνητικό πλάνο."}</p>
               </div>
             ) : (
-              <ul className="intervention-list">
+              <ul className="intervention-list" aria-label="Επιλεγμένες παρεμβάσεις" tabIndex={0}>
                 {plan.selected.map((item) => (
                   <li key={item.id}>
                     <button type="button" onClick={() => onSelectLocation(item.location_id)}>
@@ -136,8 +162,8 @@ export function Planner(props: PlannerProps) {
         <div className="comparison" id="comparison-settings">
           <form onSubmit={props.onCompare}>
             <div className="comparison-fields">
-              <div><label htmlFor="baseline-budget">Αρχικός</label><div className="currency-input currency-input--small"><input id="baseline-budget" min="0" max="100000000" type="number" inputMode="decimal" step="0.01" required value={props.baseline} onChange={(event) => props.setBaseline(event.target.value)} /><span aria-hidden="true">€</span></div></div>
-              <div><span>Τρέχων</span><strong>{budget === "" ? "—" : euros(Number(budget))}</strong></div>
+              <div><label htmlFor="baseline-budget">Αρχικός</label><div className="currency-input currency-input--small"><BudgetInput id="baseline-budget" value={props.baseline} onChange={props.setBaseline} /><span aria-hidden="true">€</span></div></div>
+              <div><span>Τρέχων</span><strong>{amount === null ? "—" : euros(amount)}</strong></div>
             </div>
             <button type="submit" className="secondary-button" disabled={props.comparisonBusy || budget === ""}>{props.comparisonBusy ? "Σύγκριση…" : "Σύγκρινε τα πλάνα"}</button>
           </form>

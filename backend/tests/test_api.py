@@ -262,7 +262,7 @@ def test_budget_and_inspection_comparison(client: TestClient) -> None:
     assert compare["retained_ids"] == ["shade-a"]
 
 
-@pytest.mark.parametrize("entry", [-1, 100_000_001, 15.001, "NaN", "Infinity"])
+@pytest.mark.parametrize("entry", [-1, 1_000_000_001, 15.001, "NaN", "Infinity"])
 def test_invalid_budgets_are_rejected(client: TestClient, entry: int | float | str) -> None:
     assert client.post("/api/optimize", json={"budget_eur": entry}).status_code == 422
 

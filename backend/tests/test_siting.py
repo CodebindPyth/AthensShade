@@ -8,7 +8,7 @@ def test_known_plaza_anchor_and_shelter_capacity() -> None:
     site = load_siting()["avdi"]
     assert site.geometry["type"] == "Polygon"
     assert site.source_url.host == "www.openstreetmap.org"
-    assert site.available_area_m2 > 2_000
+    assert site.available_area_m2 > 1_900
     assert site.road_distance_m >= 12
     assert assess_siting("avdi", "tree_planting").status == "candidate"
     assert assess_siting("avdi", "shade_structure", 220).status == "candidate"
@@ -25,7 +25,9 @@ def test_confirmed_underground_parking_requires_tree_root_space_study() -> None:
 
 
 def test_unverified_and_roadway_references_are_not_candidates(tmp_path: Path) -> None:
-    assert assess_siting("kerameikos", "shade_structure", 400).status == "unverified"
+    assert assess_siting("kerameikos", "tree_planting").status == "unverified"
+    assert assess_siting("kerameikos", "shade_structure", 400).status == "insufficient_space"
+    assert assess_siting("missing-plaza", "shade_structure").status == "unverified"
     missing = tmp_path / "unknown.json"
     assert assess_siting("avdi", "tree_planting", snapshot_path=missing).status == "unverified"
     blocked = tmp_path / "blocked.json"

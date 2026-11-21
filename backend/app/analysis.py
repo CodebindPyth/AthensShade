@@ -1,10 +1,18 @@
 from collections import defaultdict
-from decimal import ROUND_HALF_UP, Decimal
 from statistics import quantiles
 
+from .ground_options import (
+    TREE_DEFICIT_THRESHOLD_PERCENT,
+    TREE_SPACING_M,
+    add_ground_sites,
+    ground_cost,
+    tree_anchors,
+    tree_rationale,
+)
 from .models import (
     Dataset,
     ExplainedIntervention,
+    GeoJSONFeature,
     Intervention,
     Location,
     LocationAnalysis,
@@ -12,14 +20,16 @@ from .models import (
     RankedLocation,
     ShadeImpact,
 )
-from .municipal_sites import add_municipal_sites
+from .municipal_sites import _point_feature, add_municipal_sites
 from .siting import assess_siting
 
-TREE_DEFICIT_THRESHOLD_PERCENT = 15
 ATHENS_STREET_SOURCES = {"athens-sites", "athens-atlas", "copernicus-canopy"}
+ATHENS_RED_SURFACE_TEMPERATURE_C = 40.0
 
 
-def screen_ground_intervention(intervention: Intervention) -> Intervention:
+def screen_ground_intervention(
+    intervention: Intervention, location: Location, red_cells: list[GeoJSONFeature],
+) -> Intervention:
     assessment = assess_siting(intervention.location_id, intervention.type)
     evidence = assessment.evidence
     shade = intervention.shade_projection
@@ -29,51 +39,66 @@ def screen_ground_intervention(intervention: Intervention) -> Intervention:
             "siting": assessment.model_dump(mode="json", exclude={"evidence": {"geometry"}}),
         })
 
+    if _point_feature(red_cells, evidence.longitude, evidence.latitude) is None:
+        assessment = assessment.model_copy(update={
+            "status": "unverified",
+            "message": "Η χαρτογραφημένη θέση δεν εμπίπτει στην κόκκινη ζώνη του δημοτικού άτλαντα.",
+        })
+        return intervention.model_copy(update={
+            "feasibility": "unsuitable", "siting": assessment.model_dump(mode="json"),
+        })
+
     updates = {"feasibility": "requires_site_inspection"}
+    anchors: list[dict[str, float]] = []
     if intervention.type == "tree_planting" and shade:
-        tree_capacity = max(1, int(evidence.available_area_m2 // 16))
-        count = min(shade.unit_count, tree_capacity)
-        if count < shade.unit_count:
-            price = (intervention.cost_eur * count / shade.unit_count).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        capacity = min(shade.unit_count, int(evidence.available_area_m2 // TREE_SPACING_M ** 2))
+        if capacity and location.canopy_percent is not None and location.canopy_percent < TREE_DEFICIT_THRESHOLD_PERCENT:
+            anchors = tree_anchors(evidence, red_cells, capacity)
+        if anchors:
+            count = len(anchors)
             updates.update(
-                cost_eur=price,
+                cost_eur=ground_cost("tree_planting", count),
                 cost_status="indicative",
                 shade_projection=shade.model_copy(update={"unit_count": count}),
-                rationale=(
-                    f"Σενάριο έως {count} δέντρων με ενδεικτική κατανομή 16 m² ανά δέντρο στη "
-                    "χαρτογραφημένη ζώνη. Το κόστος προσαρμόζεται αναλογικά. Η αυτοψία επιβεβαιώνει "
-                    "τη διάταξη, τις υφιστάμενες φυτεύσεις, τα δίκτυα και τον χώρο ριζοβολίας."
-                ),
+                rationale=tree_rationale(evidence.model_dump(), count),
             )
+        else:
+            updates["feasibility"] = "unsuitable"
+            assessment = assessment.model_copy(update={
+                "status": "insufficient_space",
+                "message": "Ο έλεγχος δεν βρήκε αρκετό χώρο στην κόκκινη ζώνη με τεκμηριωμένο έλλειμμα δέντρων.",
+            })
+
     if intervention.type == "shade_structure" and shade:
         original_area = shade.unit_count * shade.unit_projection_max_m2
-        # Leave half of the mapped area free and preserve a margin around the anchor.
-        area = int(min(original_area, evidence.available_area_m2 / 2, 4 * (evidence.edge_clearance_m - 1.5) ** 2))
-        assessment = assess_siting(intervention.location_id, intervention.type, max(36, area))
-        if area < 16 or assessment.status != "candidate":
+        # Preserve a 2 m margin around a square footprint in the clear radius at the mapped center.
+        clearance = max(0, evidence.edge_clearance_m - 2)
+        area = int(min(original_area, evidence.available_area_m2 / 2, 2 * clearance ** 2))
+        assessment = assess_siting(intervention.location_id, intervention.type, area)
+        if area >= 16 and assessment.status == "candidate":
+            anchors = [{"latitude": evidence.latitude, "longitude": evidence.longitude}]
+            updates.update(
+                cost_eur=ground_cost("shade_structure", area),
+                cost_status="indicative",
+                shade_projection=shade.model_copy(update={
+                    "unit_count": 1, "unit_projection_min_m2": area, "unit_projection_max_m2": area,
+                }),
+                rationale=(
+                    f"Σκίαστρο {area} m² μέσα σε {evidence.available_area_m2:.0f} m² χαρτογραφημένου χώρου πεζών. "
+                    f"Το κέντρο απέχει {evidence.road_distance_m:.0f} μ. από τον κοντινότερο καταγεγραμμένο άξονα οχημάτων "
+                    f"και {evidence.edge_clearance_m:.1f} μ. από το όριο της ζώνης. "
+                    "Η αυτοψία ελέγχει τη θεμελίωση, τον άνεμο, τον προσανατολισμό και την ελεύθερη όδευση."
+                    + (f" {evidence.constraint_note}" if evidence.constraint_note else "")
+                ),
+            )
+        else:
             updates["feasibility"] = "unsuitable"
             if assessment.status == "candidate":
                 assessment = assessment.model_copy(update={
                     "status": "insufficient_space",
                     "message": "Το χαρτογραφημένο σημείο δεν αφήνει αρκετό χώρο για στήριξη και διέλευση.",
                 })
-        elif area < original_area:
-            price = (intervention.cost_eur * Decimal(area) / Decimal(str(original_area))).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP,
-            )
-            updates.update(
-                cost_eur=price,
-                cost_status="indicative",
-                shade_projection=shade.model_copy(update={
-                    "unit_count": 1, "unit_projection_min_m2": area, "unit_projection_max_m2": area,
-                }),
-                rationale=(
-                    f"Ενδεικτικό σκίαστρο {area} m² με αναλογική προσαρμογή του αρχικού κόστους. "
-                    "Η ζώνη πεζών περιορίζει το μέγεθος. Η αυτοψία ελέγχει ελεύθερη όδευση, "
-                    "εμπόδια, στήριξη και προσανατολισμό."
-                ),
-            )
-    updates["siting"] = assessment.model_dump(mode="json")
+    updates["siting"] = {**assessment.model_dump(mode="json"), "anchors": anchors}
     return intervention.model_copy(update=updates)
 
 
@@ -88,11 +113,19 @@ class AthensAnalysis:
         self.hotspot_threshold = self.heat_bounds[1] if self.heat_bounds else None
         if len(temperatures) > 1:
             self.hotspot_threshold = quantiles(temperatures, n=4, method="inclusive")[2]
+        athens_street_data = ATHENS_STREET_SOURCES.issubset(source.id for source in dataset.sources)
+        if temperatures and athens_street_data:
+            self.hotspot_threshold = ATHENS_RED_SURFACE_TEMPERATURE_C
 
         dataset = add_municipal_sites(dataset, self.hotspot_threshold)
-        if ATHENS_STREET_SOURCES.issubset(source.id for source in dataset.sources):
+        if self.hotspot_threshold is not None and athens_street_data:
+            dataset = add_ground_sites(dataset, self.hotspot_threshold)
+            red_cells = [feature for feature in dataset.heat.features
+                         if float(feature.properties["temperature_c"]) > 35
+                         and float(feature.properties["temperature_c"]) >= self.hotspot_threshold]
+            by_id = {location.id: location for location in dataset.locations}
             dataset = dataset.model_copy(update={"interventions": [
-                screen_ground_intervention(item)
+                screen_ground_intervention(item, by_id[item.location_id], red_cells)
                 if item.type in {"tree_planting", "shade_structure", "greenery"} and item.feasibility != "unsuitable"
                 else item
                 for item in dataset.interventions

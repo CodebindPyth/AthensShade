@@ -1,9 +1,11 @@
 from collections import defaultdict
 from decimal import Decimal
+from functools import lru_cache
 
 from ortools.sat.python import cp_model
 
 from .analysis import AthensAnalysis
+from .ground_options import tree_variants
 from .models import (
     ExplainedIntervention,
     FootprintRange,
@@ -22,19 +24,29 @@ class OptimizationError(Exception):
 
 
 def optimize(analysis: AthensAnalysis, request: OptimizeRequest) -> Plan:
+    return _cached_plan(analysis, request.budget_eur, request.include_inspection, request.strategy, request.priority_only)
+
+
+@lru_cache(maxsize=32)
+def _cached_plan(
+    analysis: AthensAnalysis, budget_eur: Decimal, include_inspection: bool, strategy: PlanStrategy, priority_only: bool,
+) -> Plan:
     eligible = {"verified"}
-    if request.include_inspection:
+    if include_inspection:
         eligible.add("requires_site_inspection")
 
     candidates = sorted(
         (
             row for row in analysis.dataset.interventions
             if row.feasibility in eligible
-            and (not request.priority_only or analysis.locations[row.location_id].priority_band == "high")
+            and (not priority_only or analysis.locations[row.location_id].priority_band == "high")
         ),
         key=lambda row: row.id,
     )
-    affordable = [row for row in candidates if row.cost_eur <= request.budget_eur]
+    affordable = [
+        variant for row in candidates for variant in tree_variants(row)
+        if variant.cost_eur <= budget_eur
+    ]
     status: PlanStatus
     picks: list[ExplainedIntervention] = []
     total_cost = Decimal()
@@ -54,7 +66,7 @@ def optimize(analysis: AthensAnalysis, request: OptimizeRequest) -> Plan:
             for option in options
         ]
         selected_indices, status = solve(
-            options, costs, densities, int(request.budget_eur * 100), request.strategy,
+            options, costs, densities, int(budget_eur * 100), strategy,
         )
         selected_indices.sort(key=lambda index: (
             options[index].priority_band != "high",
@@ -68,15 +80,15 @@ def optimize(analysis: AthensAnalysis, request: OptimizeRequest) -> Plan:
 
     return Plan(
         dataset_version=analysis.dataset.dataset_version,
-        budget_eur=float(request.budget_eur),
+        budget_eur=float(budget_eur),
         total_cost_eur=float(total_cost),
-        remaining_budget_eur=float(request.budget_eur - total_cost),
+        remaining_budget_eur=float(budget_eur - total_cost),
         modeled_benefit=round(sum(row.modeled_benefit for row in picks), 3),
         selected=picks,
         status=status,
-        include_inspection=request.include_inspection,
-        strategy=request.strategy,
-        priority_only=request.priority_only,
+        include_inspection=include_inspection,
+        strategy=strategy,
+        priority_only=priority_only,
         priority_site_count=sum(row.priority_band == "high" for row in picks),
         shade_impact=summarize_shade(picks),
         greened_roof_area_m2=round(sum(row.greened_roof_area_m2 or 0 for row in picks), 2),
@@ -111,7 +123,7 @@ def solve(
     strategy: PlanStrategy,
 ) -> tuple[list[int], PlanStatus]:
     model = cp_model.CpModel()
-    selected = [model.new_bool_var(option.id) for option in options]
+    selected = [model.new_bool_var(f"{option.id}:{index}") for index, option in enumerate(options)]
     by_location: dict[str, list[cp_model.IntVar]] = defaultdict(list)
     for var, option in zip(selected, options, strict=True):
         by_location[option.location_id].append(var)
@@ -132,15 +144,42 @@ def solve(
         selected, [round(option.modeled_benefit * 1000) for option in options],
     )
     order = cp_model.LinearExpr.weighted_sum(selected, range(1, len(selected) + 1))
+    tree_counts = [
+        option.shade_impact.unit_count if option.type == "tree_planting" and option.shade_impact else 0
+        for option in options
+    ]
+    shelter_counts = [
+        option.shade_impact.unit_count if option.type == "shade_structure" and option.shade_impact else 0
+        for option in options
+    ]
+    screened = any(option.siting and option.siting.get("anchors") for option in options)
     # Freeze each proven optimum before considering the next objective.
     objectives = [hotspot_count]
     if strategy in {"tree_priority", "shade_and_rest"}:
-        tree_counts = [
-            option.shade_impact.unit_count if option.type == "tree_planting" and option.shade_impact else 0
-            for option in options
-        ]
         objectives.insert(0, cp_model.LinearExpr.weighted_sum(selected, tree_counts))
-    objectives.append(population_exposure)
+    if screened:
+        counts = [cp_model.LinearExpr.weighted_sum(selected, values) for values in (tree_counts, shelter_counts)]
+        coverage = [model.new_bool_var(name) for name in ("adds_trees", "adds_shelters")]
+        for count, used in zip(counts, coverage, strict=True):
+            model.add(count >= 1).only_enforce_if(used)
+            model.add(count == 0).only_enforce_if(used.Not())
+        if strategy == "balanced":
+            ground_sites = cp_model.LinearExpr.weighted_sum(
+                selected, [int(bool(trees or shelters)) for trees, shelters in zip(tree_counts, shelter_counts, strict=True)],
+            )
+            tree_sites = cp_model.LinearExpr.weighted_sum(selected, [int(count > 0) for count in tree_counts])
+            mixed_sites = model.new_int_var(0, len(by_location), "neighborhood_mix")
+            model.add_min_equality(mixed_sites, [tree_sites, 2 * counts[1]])
+            # Policy weights favor reaching another screened plaza and a mix of
+            # immediate shelters and mature trees before concentrating all spending.
+            balanced_score = counts[0] + 16 * counts[1] + 40 * ground_sites + 15 * mixed_sites
+            objectives = [sum(coverage), balanced_score, hotspot_count]
+        elif strategy in {"tree_priority", "shade_and_rest"}:
+            objectives.extend([sum(coverage), counts[1]])
+        else:
+            objectives.append(sum(coverage))
+    else:
+        objectives.append(population_exposure)
     if strategy == "immediate_shade":
         immediate_footprints = [
             round(option.shade_impact.estimated_min_m2 * 100)
@@ -149,6 +188,8 @@ def solve(
             for option in options
         ]
         objectives.append(cp_model.LinearExpr.weighted_sum(selected, immediate_footprints))
+    if screened:
+        objectives.append(population_exposure)
     objectives.extend([total_benefit, -total_cost, -order])
     solver = cp_model.CpSolver()
     solver.parameters.num_search_workers = 1
@@ -162,6 +203,9 @@ def solve(
             if result == cp_model.FEASIBLE:
                 return best, "feasible"
             model.add(expression == solver.value(expression))
+            model.clear_hints()
+            for var in selected:
+                model.add_hint(var, solver.boolean_value(var))
         elif result == cp_model.UNKNOWN and best is not None:
             return best, "feasible"
         else:

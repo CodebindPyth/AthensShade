@@ -6,8 +6,9 @@ import { Crosshair, Layers3, Minus, Plus, X } from "lucide-react"
 import type { Feature, FeatureCollection } from "geojson"
 import type { AirObservations, AirReading, Intervention, Location, Plan, ThermalImpact } from "../lib/api"
 import { heatColor, heatThresholds, localObservationTime, numeric, shadeArea, temperature } from "../lib/format"
-import { InterventionArtwork, interventionAppearance } from "./intervention-symbol"
+import { civicAppearance, InterventionArtwork, interventionAppearance } from "./intervention-symbol"
 import { MunicipalPopupCard, TreePopupCard } from "./tree-popup-card"
+import hotNeighborhoods from "../lib/hot-neighborhoods.json"
 import styles from "./city-map.module.css"
 
 export type TileSelection = { temperature: number | null; sourceId: string | null; name?: string }
@@ -28,9 +29,8 @@ type MapProps = {
 
 const cityCenter: L.LatLngExpression = [37.991, 23.731]
 const cityZoom = 12
-const minimumTreeDistance = 36
 const impactTileRadius = 23
-const impactLabelSize = L.point(145, 36)
+const impactLabelSize = L.point(148, 56)
 const impactLabelOffsets = [
   [0, 50], [100, 30], [-100, 30], [0, -50],
   [100, -30], [-100, -30], [0, 92], [0, -92],
@@ -107,9 +107,21 @@ function impactArea(intervention?: Intervention) {
   return null
 }
 
-function impactBadge(cooling: string, area?: string) {
+function proposedUnits(intervention?: Intervention) {
+  const count = intervention?.shade_impact?.unit_count
+  if (!count) return undefined
+  if (intervention.type === "tree_planting") {
+    return count === 1 ? "+1 προτεινόμενο δέντρο" : `+${numeric(count)} προτεινόμενα δέντρα`
+  }
+  if (intervention.type === "shade_structure") {
+    return count === 1 ? "+1 προτεινόμενο σκίαστρο" : `+${numeric(count)} προτεινόμενα σκίαστρα`
+  }
+}
+
+function impactBadge(cooling: string, units?: string, area?: string) {
   const content = document.createElement("div")
   content.append(tooltip(cooling))
+  if (units) content.append(tooltip(units))
   if (area) content.append(tooltip(area))
   return content
 }
@@ -195,14 +207,15 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     .map((row) => [row.location_id, row])), [plan])
   const plannedLocations = useMemo(() => locations.filter((location) => interventionByLocation.has(location.id)), [locations, interventionByLocation])
   const visibleMunicipalLocations = useMemo(() => showMunicipal ? locations.filter((location) => (
-    location.municipal_asset && location.heat_hotspot && !interventionByLocation.has(location.id)
-  )) : [], [interventionByLocation, locations, showMunicipal])
+    location.municipal_asset && location.heat_c != null && location.heat_c > 35
+      && location.heat_c >= breaks[2] && !interventionByLocation.has(location.id)
+  )) : [], [breaks, interventionByLocation, locations, showMunicipal])
   const impactByLocation = useMemo(() => new Map(
     plan?.thermal_impact?.flatMap((impact) => impact.location_ids.map((id) => [id, impact] as const)),
   ), [plan])
   const visibleMarkerStyles = [...new Set([
     ...plannedLocations.map((location) => proposalAppearance(location, interventionByLocation.get(location.id))),
-    ...(visibleMunicipalLocations.length > 0 ? [interventionAppearance("municipal_building")] : []),
+    ...visibleMunicipalLocations.map((location) => civicAppearance(location.municipal_asset?.kind)),
   ])]
   const activeTree = treeSelection && treeSelection.plan === plan
     ? plannedLocations.find((location) => location.id === treeSelection.id)
@@ -211,6 +224,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     : null
   const activeImpact = activeTree && showImpact ? impactByLocation.get(activeTree.id) : undefined
   const activeArea = activeTree && showImpact ? impactArea(interventionByLocation.get(activeTree.id)) : null
+  const activeUnits = activeTree && showImpact ? proposedUnits(interventionByLocation.get(activeTree.id)) : null
   const cardVisible = cardPosition !== null
 
   useEffect(() => {
@@ -226,10 +240,11 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     }).setView(cityCenter, cityZoom)
     instance.current = map
     map.attributionControl.setPrefix(false)
-    for (const [name, zIndex] of [["heat", 380], ["context", 410], ["trees", 420], ["plantings", 425], ["impact", 430], ["impact-labels", 540]] as const) {
+    for (const [name, zIndex] of [["heat", 380], ["context", 410], ["trees", 420], ["plantings", 425], ["impact", 430], ["neighborhood-labels", 605], ["proposal-anchors", 500], ["impact-labels", 625]] as const) {
       map.createPane(name).style.zIndex = String(zIndex)
     }
     map.getPane("plantings")?.style.setProperty("pointer-events", "none")
+    map.getPane("neighborhood-labels")?.style.setProperty("pointer-events", "none")
     const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       className: "city-basemap",
       maxNativeZoom: 19,
@@ -348,6 +363,32 @@ export default function CityMap({ heat, trees, context, air, locations, selected
 
   useEffect(() => {
     const map = instance.current
+    if (!map || !heat || !showHeat) return
+    const labels = L.layerGroup().addTo(map)
+    const place = () => {
+      labels.clearLayers()
+      const occupied: L.Point[] = []
+      const bounds = map.getBounds()
+      for (const { name, latitude, longitude, heat_c } of hotNeighborhoods) {
+        if (heat_c < breaks[2]) continue
+        const point = L.latLng(latitude, longitude)
+        if (!bounds.contains(point)) continue
+        const position = map.latLngToContainerPoint(point)
+        if (occupied.some((other) => Math.abs(other.x - position.x) < 126 && Math.abs(other.y - position.y) < 35)) continue
+        occupied.push(position)
+        L.marker(point, {
+          pane: "neighborhood-labels", interactive: false, keyboard: false,
+          icon: L.divIcon({ className: styles.neighborhoodName, html: tooltip(name), iconSize: [0, 0], iconAnchor: [0, 0] }),
+        }).addTo(labels)
+      }
+    }
+    place()
+    map.on("moveend", place)
+    return () => { map.off("moveend", place); labels.remove() }
+  }, [breaks, heat, showHeat])
+
+  useEffect(() => {
+    const map = instance.current
     if (!map || !trees || !showCanopy) return
     const renderer = L.canvas({ pane: "trees" })
     const layer = L.geoJSON(trees, {
@@ -399,20 +440,21 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     if (!map || visibleMunicipalLocations.length === 0) return
     const buildings = L.layerGroup().addTo(map)
     const byId = new Map<string, L.Marker>()
-    const appearance = interventionAppearance("municipal_building")
-    const icon = L.divIcon({
-      html: markerGlyph(appearance), className: styles.treePin,
-      iconSize: [28, 28], iconAnchor: [14, 14],
-    })
     for (const location of visibleMunicipalLocations) {
-      const title = `Δημοτικό κτίριο · ${location.name}`
+      const appearance = civicAppearance(location.municipal_asset?.kind)
+      const title = `${appearance.label} · ${location.name}`
+      const icon = L.divIcon({
+        html: markerGlyph(appearance), className: styles.treePin,
+        iconSize: [28, 28], iconAnchor: [14, 14],
+      })
       const marker = L.marker(proposalPoint(location), {
-        icon, title, riseOnHover: true, zIndexOffset: 100,
+        icon, title, riseOnHover: true, zIndexOffset: location.municipal_asset?.kind === "school" ? 50 : 1000,
       }).addTo(buildings)
       const element = marker.getElement()
       element?.setAttribute("aria-label", title)
       element?.setAttribute("aria-expanded", "false")
       element?.setAttribute("data-municipal-location", location.id)
+      element?.setAttribute("data-facility-kind", location.municipal_asset?.kind ?? "building")
       element?.style.setProperty("--intervention-color", appearance.color)
       const toggle = () => setTreeSelection((previous) => (
         previous?.plan === plan && previous.id === location.id ? null : { id: location.id, plan }
@@ -421,8 +463,24 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       supportSpaceKey(element, toggle)
       byId.set(location.id, marker)
     }
+    const spaceSchoolPins = () => {
+      const occupied = [...byId].filter(([id]) => !id.startsWith("school-atlas-"))
+        .map(([, pin]) => map.project(pin.getLatLng()))
+      const spacing = map.getZoom() >= 16 ? 12 : 22
+      for (const [id, pin] of byId) {
+        if (!id.startsWith("school-atlas-")) continue
+        const position = map.project(pin.getLatLng())
+        const hide = occupied.some((other) => other.distanceTo(position) < spacing)
+        const element = pin.getElement()
+        if (element) element.hidden = hide
+        if (!hide) occupied.push(position)
+      }
+    }
+    spaceSchoolPins()
+    map.on("zoomend", spaceSchoolPins)
     municipalMarkers.current = byId
     return () => {
+      map.off("zoomend", spaceSchoolPins)
       buildings.remove()
       municipalMarkers.current = new Map()
     }
@@ -434,16 +492,16 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     if (!map || !plan) return
     fitCity(map, areaBounds.current ?? thermalBounds.current)
     const markers = L.layerGroup().addTo(map)
-    const connectors = L.layerGroup().addTo(map)
     const byId = new Map<string, L.Marker>()
     for (const location of plannedLocations) {
       const priority = location.priority_band === "high"
       const intervention = interventionByLocation.get(location.id)
       const type = intervention?.type ?? ""
       const appearance = proposalAppearance(location, intervention)
-      const label = `Πρόταση για ${location.name} · ${appearance.label}`
+      const quantity = intervention?.shade_impact?.unit_count
+      const label = [location.name, proposedUnits(intervention) ?? appearance.label].join(" · ")
       const icon = L.divIcon({
-        html: markerGlyph(appearance),
+        html: `${markerGlyph(appearance)}${quantity && quantity > 1 ? `<span class="${styles.pinCount}" aria-hidden="true">${numeric(quantity)}</span>` : ""}`,
         iconSize: [32, 32],
         iconAnchor: [16, 16],
         className: styles.treePin,
@@ -452,7 +510,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
         title: label,
         icon,
         riseOnHover: true,
-        zIndexOffset: priority ? 300 : 200,
+        zIndexOffset: priority ? 1800 : 1700,
       }).addTo(markers)
       const element = marker.getElement()
       element?.setAttribute("aria-label", label)
@@ -469,42 +527,41 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       supportSpaceKey(element, () => marker.fire("click"))
       byId.set(location.id, marker)
     }
-    const separatePins = () => {
-      connectors.clearLayers()
-      const occupied = [...municipalMarkers.current.values()].map((marker) => map.project(marker.getLatLng()))
-      for (const location of plannedLocations) {
-        const intervention = interventionByLocation.get(location.id)
-        const actual = proposalPoint(location, intervention)
-        const origin = map.project(actual)
-        let position = origin
-        let ring = 0
-        while (occupied.some((other) => other.distanceTo(position) < minimumTreeDistance)) {
-          ring += 1
-          const radius = minimumTreeDistance * Math.ceil(ring / 8)
-          const angle = ((ring - 1) % 8) * Math.PI / 4
-          position = origin.add(L.point(Math.cos(angle) * radius, Math.sin(angle) * radius))
-        }
-        occupied.push(position)
-        const anchor = position.equals(origin) ? actual : map.unproject(position)
-        byId.get(location.id)?.setLatLng(anchor)
-        if (!anchor.equals(actual)) {
-          const appearance = proposalAppearance(location, intervention)
-          L.polyline([actual, anchor], {
-            color: appearance.color, weight: 1.5, opacity: 0.78, interactive: false,
-          }).addTo(connectors)
-        }
-      }
-    }
-    separatePins()
-    map.on("zoomend", separatePins)
     treeMarkers.current = byId
     return () => {
-      map.off("zoomend", separatePins)
-      connectors.remove()
       markers.remove()
       treeMarkers.current = new Map()
     }
-  }, [interventionByLocation, plan, plannedLocations, visibleMunicipalLocations])
+  }, [interventionByLocation, plan, plannedLocations])
+
+  useEffect(() => {
+    const map = instance.current
+    if (!map || !plan) return
+    const anchors = L.layerGroup().addTo(map)
+    const place = () => {
+      anchors.clearLayers()
+      if (map.getZoom() < 15.5) return
+      for (const item of plan.selected) {
+        const color = interventionAppearance(item.type).color
+        const units = proposedUnits(item)
+        for (const { latitude, longitude } of item.siting?.anchors ?? []) {
+          const point = map.getZoom() >= 17 ? L.marker([latitude, longitude], {
+            pane: "proposal-anchors", title: item.type === "tree_planting" ? "Προτεινόμενο δέντρο" : "Προτεινόμενο σκίαστρο",
+            icon: L.divIcon({ className: styles.unitPin, html: markerGlyph(interventionAppearance(item.type)), iconSize: [14, 14], iconAnchor: [7, 7] }),
+          }).addTo(anchors) : L.circleMarker([latitude, longitude], {
+            pane: "proposal-anchors", radius: 4, color: "white", weight: 1.3,
+            fillColor: color, fillOpacity: 1, bubblingMouseEvents: false,
+          }).addTo(anchors)
+          point.getElement()?.setAttribute("data-proposal-anchor", item.location_id)
+          if (units) point.bindTooltip(tooltip(units))
+          point.on("click", () => setTreeSelection({ id: item.location_id, plan }))
+        }
+      }
+    }
+    place()
+    map.on("zoomend", place)
+    return () => { map.off("zoomend", place); anchors.remove() }
+  }, [plan])
 
   useEffect(() => {
     const map = instance.current
@@ -527,6 +584,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       const impact = impactByLocation.get(location.id)
       const cooling = coolingLabel(impact)
       const area = impactArea(intervention)
+      const units = proposedUnits(intervention)
       const color = cooling ? "#176d87" : "#53647b"
       const open = () => setTreeSelection({ id: location.id, plan })
       const screenedArea = intervention?.siting?.evidence?.geometry
@@ -547,11 +605,11 @@ export default function CityMap({ heat, trees, context, air, locations, selected
         pane: "impact", color, weight: 1, opacity: 0.75, interactive: false,
       }).addTo(geometry)
       const label = cooling ?? "Χωρίς εκτίμηση ψύξης"
-      const title = [location.name, label, area?.short, impact?.metric].filter(Boolean).join(" · ")
+      const title = [location.name, label, units, area?.short, impact?.metric].filter(Boolean).join(" · ")
       const marker = L.marker(actual, {
         pane: "impact-labels", title,
         icon: L.divIcon({
-          html: impactBadge(label, area?.short), iconSize: impactLabelSize,
+          html: impactBadge(label, units, area?.short), iconSize: impactLabelSize,
           iconAnchor: impactLabelSize.divideBy(2),
           className: `${styles.impactLabel}${cooling ? "" : ` ${styles.impactUnknown}`}`,
         }),
@@ -567,6 +625,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     const placeTiles = () => {
       const occupied: L.Point[] = []
       const pinCenters = [...treeMarkers.current.values(), ...municipalMarkers.current.values()]
+        .filter((marker) => !marker.getElement()?.hidden)
         .map((marker) => map.project(marker.getLatLng()))
       for (const { actual, tile, guide, marker } of tiles) {
         const origin = map.project(actual)
@@ -713,6 +772,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
             {(activeImpact || activeArea) && (
               <section className={styles.impactDetail} aria-label="Υποθετική τοπική ψύξη">
                 <strong>{coolingLabel(activeImpact) ?? "Χωρίς αριθμητική εκτίμηση"}</strong>
+                {activeUnits && <p className={styles.impactUnits}>{activeUnits}</p>}
                 {activeArea && <p className={styles.impactArea}>{activeArea.detail}</p>}
                 {activeImpact && <p>{activeImpact.metric}. {activeImpact.evidence}</p>}
                 {activeImpact?.evidence_url && (
@@ -743,7 +803,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
           {showCanopy && <p className={styles.canopyHint}>Πάτησε ένα κελί για το ποσοστό κάλυψης.</p>}
           <label><input type="checkbox" checked={showPlantings} onChange={(event) => setShowPlantings(event.target.checked)} /> Καταγραφές φύτευσης</label>
           <label><input type="checkbox" checked={showParks} onChange={(event) => setShowParks(event.target.checked)} /> Πάρκα τσέπης</label>
-          <label><input type="checkbox" checked={showMunicipal} onChange={(event) => setShowMunicipal(event.target.checked)} /> Δημοτικά κτίρια σε θερμές ζώνες</label>
+          <label><input type="checkbox" checked={showMunicipal} onChange={(event) => setShowMunicipal(event.target.checked)} /> Δημόσιες υπηρεσίες σε κόκκινες ζώνες</label>
         </div>
       )}
       {(!tilesAvailable || !heat) && (

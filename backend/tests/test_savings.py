@@ -1,8 +1,7 @@
 from fastapi.testclient import TestClient
 
-from app.main import DEFAULT_DATASET_PATH, create_app, load_dataset
-from app.models import OptimizeRequest
-from app.optimizer import optimize
+from app.main import DEFAULT_DATASET_PATH, create_app
+from app.models import ExplainedIntervention, ShadeImpact
 from app.savings import calculate_savings
 
 
@@ -16,29 +15,28 @@ def demo_scenario(budget: int) -> dict:
 
 
 def test_savings_scale_with_selected_interventions() -> None:
-    stat = DEFAULT_DATASET_PATH.stat()
-    analysis = load_dataset(DEFAULT_DATASET_PATH, stat.st_mtime_ns, stat.st_size)
-    large_plan = optimize(analysis, OptimizeRequest(**demo_scenario(150_000)))
-    small_plan = optimize(analysis, OptimizeRequest(**demo_scenario(50_000)))
-    larger = calculate_savings(large_plan.selected)
-    smaller = calculate_savings(small_plan.selected)
-
-    assert larger.source == "hypothetical_scenario"
-    assert larger.gross_annual_eur == 7_100
-    assert larger.annual_maintenance_eur == 2_809.65
-    assert larger.net_annual_eur == 4_290.35
-    assert larger.net_annual_eur > smaller.net_annual_eur
-    assert [row.intervention_id for row in larger.items] == [row.id for row in large_plan.selected]
-    assert all(len(row.assumptions) == 2 for row in larger.items)
-
-    tree = next(row for row in larger.items if row.type == "tree_planting")
-    assert tree.gross_annual_eur == 0
-    assert tree.net_annual_eur == -tree.annual_maintenance_eur
-    assert "1.200 €" in tree.assumptions[0]
-    assert "ώριμη κόμη" in tree.assumptions[0]
-    assert tree.benefit and "ψύξης" in tree.benefit
-    shelter = next(row for row in larger.items if row.type == "shade_structure")
-    assert shelter.benefit and "εξοπλισμό" in shelter.benefit
+    trees = ExplainedIntervention.model_construct(
+        id="trees", location_id="plaza", type="tree_planting", cost_eur=10_000,
+        shade_impact=ShadeImpact(unit_count=10, estimated_min_m2=100, estimated_max_m2=180,
+                                 horizon="at_tree_maturity", assumption="Example"),
+    )
+    shelter = trees.model_copy(update={
+        "id": "shelter", "location_id": "square", "type": "shade_structure", "cost_eur": 20_000,
+        "shade_impact": trees.shade_impact.model_copy(update={"unit_count": 1, "horizon": "after_installation"}),
+    })
+    roof = trees.model_copy(update={
+        "id": "roof", "location_id": "school", "type": "green_roof", "cost_eur": 15_000,
+        "shade_impact": None, "greened_roof_area_m2": 40,
+    })
+    plan = calculate_savings([trees, shelter, roof])
+    assert plan.source == "hypothetical_scenario"
+    assert [row.gross_annual_eur for row in plan.items] == [100, 4_800, 200]
+    assert [row.net_annual_eur for row in plan.items] == [-100, 4_400, -100]
+    assert (plan.gross_annual_eur, plan.annual_maintenance_eur, plan.net_annual_eur) == (5_100, 900, 4_200)
+    assert "500 kWh" in plan.items[0].assumptions[0]
+    assert "δημοτικό λογαριασμό" in plan.items[0].assumptions[0]
+    unknown = calculate_savings([trees.model_copy(update={"shade_impact": None})])
+    assert unknown.gross_annual_eur == 0 and unknown.net_annual_eur == -200
 
 
 def test_savings_uses_same_site_figures_on_map_card(monkeypatch) -> None:
@@ -48,11 +46,12 @@ def test_savings_uses_same_site_figures_on_map_card(monkeypatch) -> None:
         plan_response = client.post("/api/savings", json=scenario)
         assert plan_response.status_code == 200
         plan_savings = plan_response.json()
-        for location_id in ("kotzia", "school-120", "avdi"):
+        assert len(plan_savings["items"]) >= 1
+        for plan_item in plan_savings["items"][:3]:
+            location_id = plan_item["location_id"]
             response = client.post(f"/api/locations/{location_id}/plan-card", json=scenario)
             assert response.status_code == 200
             card = response.json()["savings"]
-            plan_item = next(row for row in plan_savings["items"] if row["location_id"] == location_id)
             assert card["items"] == [plan_item]
             assert card["net_annual_eur"] == plan_item["net_annual_eur"]
 

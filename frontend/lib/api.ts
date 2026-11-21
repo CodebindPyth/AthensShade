@@ -1,17 +1,22 @@
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson"
 
 export type MunicipalAsset = {
-  kind: "school" | "building"
+  kind: "school" | "building" | "police" | "fire" | "hospital" | "kep" | "court"
   source_url: string
   source_label: string
   notes: string[]
   temperature_scope: "atlas_cell" | "existing_100m_estimate"
   heritage?: boolean
+  agency?: string | null
+  address?: string | null
+  coordinates_url?: string | null
+  advisory_only?: boolean
 }
 
 export type Siting = {
   status: "candidate" | "road_conflict" | "insufficient_space" | "unverified"
   message: string
+  anchors?: { latitude: number; longitude: number }[]
   evidence: {
     latitude: number
     longitude: number

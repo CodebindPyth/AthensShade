@@ -78,10 +78,6 @@ export function ImpactCard({ plan }: { plan: Plan }) {
         </dl>
         <p className={styles.caption}>Οι επιφάνειες σκιάς είναι ενδεικτικές, πριν από πιθανές επικαλύψεις.</p>
         {missingCount > 0 && <p className={styles.caption}>Παρεμβάσεις χωρίς εκτίμηση επιφάνειας · {missingCount}</p>}
-        <p className={styles.caption}>
-          Η μεταβολή θερμοκρασίας προκύπτει από{" "}
-          <a href="#microclimate-monitor">μετρήσεις πριν και μετά</a>.
-        </p>
       </section>
     </>
   )

@@ -11,7 +11,7 @@ PlanStatus = Literal["optimal", "feasible", "no_eligible_interventions", "no_aff
 PlanStrategy = Literal["balanced", "immediate_shade", "tree_priority", "shade_and_rest"]
 ShadeHorizon = Literal["after_installation", "at_tree_maturity"]
 Percent = Annotated[float, Field(ge=0, le=100, allow_inf_nan=False)]
-Budget = Annotated[Decimal, Field(ge=0, le=100_000_000, decimal_places=2)]
+Budget = Annotated[Decimal, Field(ge=0, le=1_000_000_000, decimal_places=2)]
 Cost = Annotated[Decimal, Field(gt=0, le=100_000_000, decimal_places=2)]
 
 

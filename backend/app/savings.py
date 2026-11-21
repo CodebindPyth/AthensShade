@@ -28,6 +28,8 @@ class SavingsScenario(BaseModel):
 
 
 ENERGY_KWH_PER_ROOF_M2 = Decimal(25)
+TREE_BUILDING_SHADE_FRACTION = Decimal("0.20")
+TREE_SUMMER_COOLING_KWH_PER_SHADED_M2 = Decimal(25)
 ENERGY_EUR_PER_KWH = Decimal("0.20")
 SEASONAL_RENTAL_PER_SHELTER_EUR = Decimal(4800)
 MAINTENANCE_FRACTION = Decimal("0.02")
@@ -53,6 +55,10 @@ def _cents(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def _quantity(value: Decimal) -> str:
+    return f"{_cents(value):,.2f}".rstrip("0").rstrip(".").translate(str.maketrans(",.", ".,"))
+
+
 def _gross_savings(item: ExplainedIntervention) -> tuple[Decimal, str]:
     if item.type == "green_roof":
         if item.greened_roof_area_m2 is None:
@@ -74,11 +80,17 @@ def _gross_savings(item: ExplainedIntervention) -> tuple[Decimal, str]:
             "και εγκατάσταση προσωρινής σκίασης αξίας 4.800 € τον χρόνο.",
         )
     if item.type == "tree_planting":
+        if not item.shade_impact:
+            return Decimal(0), "Χρειάζεται εκτίμηση ώριμης κόμης και έλεγχος του κτιρίου που σκιάζεται."
+        canopy = Decimal(str(item.shade_impact.estimated_min_m2))
+        kwh = canopy * TREE_BUILDING_SHADE_FRACTION * TREE_SUMMER_COOLING_KWH_PER_SHADED_M2
         return (
-            Decimal(0),
-            "Το βασικό σενάριο υπολογίζει 0 € άμεσης εξοικονόμησης. Με ώριμη κόμη, "
-            "ένα εναλλακτικό παράδειγμα είναι 1.200 € τον χρόνο, εφόσον τα δέντρα "
-            "αντικαθιστούν τεκμηριωμένη εποχική μίσθωση σκίασης στην ίδια θέση.",
+            kwh * ENERGY_EUR_PER_KWH,
+            f"Στην ωρίμανση, αν το 20% των {_quantity(canopy)} m² της κόμης σκιάζει κλιματιζόμενη "
+            "δημοτική εγκατάσταση, υποθέτουμε 25 kWh λιγότερης κατανάλωσης ψύξης ανά σκιαζόμενο m² "
+            f"το καλοκαίρι. Αυτό δίνει {_quantity(kwh)} kWh/έτος με ενδεικτική τιμή 0,20 €/kWh. "
+            "Χωρίς τέτοια έκθεση το αντίστοιχο όφελος στον δημοτικό λογαριασμό είναι 0 €. "
+            "Η μείωση σε ιδιωτικούς λογαριασμούς αφορά τους κατοίκους.",
         )
     return Decimal(0), "Υποθέτουμε 0 € άμεσης εξοικονόμησης για τη διαμόρφωση πρασίνου."
 

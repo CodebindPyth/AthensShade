@@ -7,11 +7,11 @@ import type { FormEvent } from "react"
 import type { TileSelection } from "../components/city-map"
 import { AiBrief } from "../components/ai-brief"
 import { CoolingEstimates, InvestmentPanel } from "../components/investment-panel"
-import { MicroclimateMonitor } from "../components/microclimate-monitor"
 import { Planner } from "../components/planner"
 import { api } from "../lib/api"
 import type { AirObservations, Analysis, Comparison, DataSource, Dataset, Layers, Location, Plan, Strategy } from "../lib/api"
 import { euros, feasibilityLabel, interventionLabel, numeric, shadeArea, shadeLabel, temperature } from "../lib/format"
+import { formatBudgetInput, maxBudget, parseBudget } from "../lib/budget"
 
 const CityMap = dynamic(() => import("../components/city-map"), {
   ssr: false,
@@ -35,8 +35,8 @@ export default function AthensShade() {
   const [selectedTile, setSelectedTile] = useState<TileSelection | null>(null)
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [analysisErrorId, setAnalysisErrorId] = useState<string | null>(null)
-  const [budget, setBudget] = useState(String(defaultBudget))
-  const [baseline, setBaseline] = useState("50000")
+  const [budget, setBudget] = useState(formatBudgetInput(String(defaultBudget)))
+  const [baseline, setBaseline] = useState("50.000")
   const [includeInspection, setIncludeInspection] = useState(true)
   const [strategy, setStrategy] = useState<Strategy>("tree_priority")
   const [plan, setPlan] = useState<Plan | null>(null)
@@ -126,7 +126,10 @@ export default function AthensShade() {
   const calculate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const amount = parseBudget(budget)
-    if (amount === null) return
+    if (amount === null) {
+      setPlanError(`Συμπλήρωσε προϋπολογισμό από 0 έως ${euros(maxBudget)}.`)
+      return
+    }
     setBusy(true)
     setPlanError(null)
     try {
@@ -145,7 +148,7 @@ export default function AthensShade() {
     const initial = parseBudget(baseline)
     const current = parseBudget(budget)
     if (initial === null || current === null) {
-      setComparisonError("Συμπλήρωσε έγκυρο ποσό και στους δύο προϋπολογισμούς.")
+      setComparisonError(`Συμπλήρωσε ποσό από 0 έως ${euros(maxBudget)} και στους δύο προϋπολογισμούς.`)
       return
     }
     setComparisonBusy(true)
@@ -260,21 +263,22 @@ export default function AthensShade() {
             onSelectLocation={(id) => { onSelectLocation(id); setFocusAnalysis(true) }}
             onCalculate={calculate} onCompare={compare}
           />
+          <div className="workspace-analysis">
+            {selectedLocation && (
+              <SiteDetails
+                location={selectedLocation}
+                analysis={currentAnalysis}
+                failed={analysisErrorId === selectedId}
+                sourceById={sourceById}
+                heatThreshold={dataset?.heat_hotspot_threshold_c}
+                treeThreshold={dataset?.tree_deficit_threshold_percent}
+              />
+            )}
+            <AiBrief plan={plan} isStale={isStale} />
+            <CoolingEstimates plan={plan} isStale={isStale} locations={locationById} />
+            <InvestmentPanel plan={plan} isStale={isStale} locations={locationById} />
+          </div>
         </div>
-        {selectedLocation && (
-          <SiteDetails
-            location={selectedLocation}
-            analysis={currentAnalysis}
-            failed={analysisErrorId === selectedId}
-            sourceById={sourceById}
-            heatThreshold={dataset?.heat_hotspot_threshold_c}
-            treeThreshold={dataset?.tree_deficit_threshold_percent}
-          />
-        )}
-        <AiBrief plan={plan} isStale={isStale} />
-        <CoolingEstimates plan={plan} isStale={isStale} locations={locationById} />
-        <InvestmentPanel plan={plan} isStale={isStale} locations={locationById} />
-        <MicroclimateMonitor />
       </main>
     </>
   )
@@ -284,13 +288,6 @@ function SourceTitle({ source }: { source: DataSource }) {
   const href = source.url
   if (!href || !/^https?:\/\//i.test(href)) return <span>{source.title}</span>
   return <a href={href} target="_blank" rel="noreferrer">{source.title}<ExternalLink size={13} aria-hidden="true" /></a>
-}
-
-function parseBudget(value: string) {
-  const amount = Number(value)
-  if (value === "" || !Number.isFinite(amount) || amount < 0 || amount > 100_000_000) return null
-  const cents = Math.round(amount * 100)
-  return Math.abs(cents / 100 - amount) < 1e-10 ? cents / 100 : null
 }
 
 function SiteDetails({ location, analysis, failed, sourceById, heatThreshold, treeThreshold }: {

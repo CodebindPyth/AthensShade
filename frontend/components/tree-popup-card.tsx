@@ -3,6 +3,7 @@ import { Sparkles } from "lucide-react"
 import { api } from "../lib/api"
 import type { Intervention, Location, MunicipalAdvice, Plan, SiteCardResponse, Siting } from "../lib/api"
 import { euros, feasibilityLabel, interventionLabel, numeric, shadeArea, shadeLabel, temperature } from "../lib/format"
+import { civicAppearance } from "./intervention-symbol"
 import styles from "./tree-popup-card.module.css"
 
 type TreePopupCardProps = { location: Location; plan: Plan }
@@ -24,7 +25,7 @@ export function TreePopupCard({ location, plan }: TreePopupCardProps) {
   return (
     <section className={styles.card} aria-label={`Παρέμβαση στο σημείο ${location.name}`}>
       <header className={styles.header}>
-        <span className={styles.budget}>Demo · Συνολικό budget {euros(budget_eur)}</span>
+        <span className={styles.budget}>Συνολικός προϋπολογισμός {euros(budget_eur)}</span>
         <h3>{location.name}</h3>
         <p className={styles.context}>
           {[
@@ -61,6 +62,12 @@ export function TreePopupCard({ location, plan }: TreePopupCardProps) {
               </p>
             )}
             {benefit && <p className={styles.benefit}>{benefit}</p>}
+            {item.siting && item.rationale.length > 0 && (
+              <details className={styles.siting} open>
+                <summary>Γιατί προτείνεται εδώ</summary>
+                <ul>{(typeof item.rationale === "string" ? [item.rationale] : item.rationale).map((reason) => <li key={reason}>{reason}</li>)}</ul>
+              </details>
+            )}
             {item.siting && <SitingDetails siting={item.siting} />}
           </li>
           )
@@ -114,12 +121,17 @@ function SitingDetails({ siting }: { siting: Siting }) {
 }
 
 export function MunicipalPopupCard({ location }: { location: Location }) {
+  const { agency, address, kind, advisory_only } = location.municipal_asset ?? {}
+  const { label } = civicAppearance(kind)
   return (
-    <section className={styles.card} aria-label={`Δημοτικό κτίριο · ${location.name}`}>
+    <section className={styles.card} aria-label={`${label} · ${location.name}`}>
       <header className={styles.header}>
-        <span className={styles.budget}>Δημοτικά κτίρια · θερμή ζώνη</span>
+        <span className={styles.budget}>{label} · κόκκινη ζώνη</span>
         <h3>{location.name}</h3>
+        {address && <p className={styles.context}>{address}</p>}
+        {agency && <p className={styles.context}>{agency}</p>}
         {location.heat_c !== null && <p className={styles.context}>{temperature(location.heat_c)} ιστορική θερμοκρασία επιφάνειας</p>}
+        {advisory_only && <p className={styles.context}>Ενδεικτικές λύσεις προς συζήτηση με τον αρμόδιο φορέα.</p>}
       </header>
       <MunicipalOptions location={location} />
     </section>
@@ -147,6 +159,7 @@ function MunicipalOptions({ location }: { location: Location }) {
         <summary>Άλλες επιλογές και πηγή</summary>
         <ul>{asset.notes.filter((note) => note !== first).map((note) => <li key={note}>{note}</li>)}</ul>
         <a href={asset.source_url} target="_blank" rel="noreferrer">{asset.source_label}</a>
+        {asset.coordinates_url && <a href={asset.coordinates_url} target="_blank" rel="noreferrer"> Χαρτογραφημένη θέση</a>}
       </details>
     </section>
   )
@@ -162,19 +175,16 @@ function SiteAssessment({ brief }: { brief: SiteCardResponse }) {
       </p>
       <p className={styles.guidance}>{brief.explanation}</p>
       <div className={styles.finance}>
-        <p className={styles.origin}>Ετήσια οικονομική επίδραση · Demo</p>
+        <p className={styles.origin}>Εκτίμηση για τον Δήμο ανά έτος</p>
         {savings ? (
           <>
-            <p className={styles.savingsFigure}>
-              {savings.net_annual_eur >= 0
-                ? `${euros(savings.net_annual_eur)}/έτος καθαρή εξοικονόμηση`
-                : `${euros(-savings.net_annual_eur)}/έτος καθαρό κόστος`}
-            </p>
-            {assumptions[0] && <p className={styles.context}>{assumptions[0]}</p>}
+            <p className={styles.savingsFigure}>{euros(savings.gross_annual_eur)} δυνητική μείωση δαπανών</p>
+            <p className={styles.context}>{euros(savings.annual_maintenance_eur)} πρόσθετη συντήρηση</p>
+            <p className={styles.savingsFigure}>Καθαρό λειτουργικό αποτέλεσμα {savings.net_annual_eur > 0 ? "+" : ""}{euros(savings.net_annual_eur)}/έτος</p>
+            {savings.items.some((item) => item.type === "tree_planting") && <p className={styles.context}>Στην ωρίμανση, εφόσον η κόμη σκιάζει κλιματιζόμενο δημοτικό κτίριο.</p>}
             <details className={styles.details}>
-              <summary>Παραδοχές υποθετικού σεναρίου</summary>
-              <p>{euros(savings.gross_annual_eur)} μείωση δαπανών · {euros(savings.annual_maintenance_eur)} συντήρηση ανά έτος.</p>
-              {Array.from(new Set(assumptions.slice(1))).map((assumption) => <p key={assumption}>{assumption}</p>)}
+              <summary>Πώς προκύπτουν τα ποσά</summary>
+              {Array.from(new Set(assumptions)).map((assumption) => <p key={assumption}>{assumption}</p>)}
             </details>
           </>
         ) : (

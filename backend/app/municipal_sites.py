@@ -3,8 +3,10 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from math import isfinite
+from hashlib import sha1
 
 from .models import Dataset, GeoJSONFeature, Location, Source
+from .public_facilities import PUBLIC_FACILITIES
 
 
 @dataclass(frozen=True)
@@ -127,6 +129,50 @@ def _asset_notes(kind: str, source: Source, notes: Sequence[str], scope: str, **
     }
 
 
+def _school_locations(dataset: Dataset, source: Source, threshold: float, existing: list[Location]):
+    """Match official public school points to actual red atlas cells; index by geographic bins."""
+    red_bins: dict[tuple[int, int], list[GeoJSONFeature]] = {}
+    for cell in dataset.heat.features:
+        value = cell.properties.get("temperature_c")
+        if not isinstance(value, (float, int)) or value < threshold or value <= 35:
+            continue
+        geom = cell.geometry or {}
+        if geom.get("type") != "Polygon":
+            continue
+        ring = geom["coordinates"][0]
+        xs, ys = zip(*[(point[0], point[1]) for point in ring])
+        for x in range(int(min(xs) * 100), int(max(xs) * 100) + 1):
+            for y in range(int(min(ys) * 100), int(max(ys) * 100) + 1):
+                red_bins.setdefault((x, y), []).append(cell)
+
+    known = {(round(row.longitude, 5), round(row.latitude, 5)) for row in existing if row.municipal_asset}
+    for feature in dataset.context.features if dataset.context else ():
+        properties = feature.properties
+        geom = feature.geometry or {}
+        if properties.get("kind") != "school" or properties.get("source_id") != source.id or geom.get("type") != "Point":
+            continue
+        name = properties.get("name")
+        if not name:
+            continue
+        lon, lat = geom["coordinates"][:2]
+        position = round(lon, 5), round(lat, 5)
+        if position in known:
+            continue
+        cell = _point_feature(red_bins.get((int(lon * 100), int(lat * 100)), []), lon, lat)
+        if cell is None:
+            continue
+        known.add(position)
+        key = sha1(f"{lon:.6f},{lat:.6f}".encode()).hexdigest()[:12]
+        district = _point_feature(dataset.context.features, lon, lat, "district")
+        yield Location(
+            id=f"school-atlas-{key}", name=name, latitude=lat, longitude=lon,
+            district=district.properties["name"] if district else "Δήμος Αθηναίων",
+            heat_c=float(cell.properties["temperature_c"]), canopy_percent=None,
+            shade_status="unknown", source_ids=[source.id, cell.properties["source_id"]],
+            municipal_asset=_asset_notes("school", source, SCHOOL_OPTIONS, "atlas_cell", advisory_only=True),
+        )
+
+
 def _candidate(
     dataset: Dataset,
     threshold: float,
@@ -162,18 +208,20 @@ def _candidate(
 def add_municipal_sites(dataset: Dataset, hotspot_threshold: float | None) -> Dataset:
     """Add documented study locations, leaving their street footprint and costs unclaimed."""
     schools = next((source for source in dataset.sources if source.id == "athens-schools" and source.url), None)
-    if schools is None or hotspot_threshold is None:
+    if hotspot_threshold is None:
         return dataset
     locations = [
         location.model_copy(update={
             "municipal_asset": _asset_notes("school", schools, SCHOOL_OPTIONS, "existing_100m_estimate"),
         })
-        if schools.id in location.source_ids and not getattr(location, "municipal_asset", None) else location
+        if schools and schools.id in location.source_ids and not location.municipal_asset else location
         for location in dataset.locations
     ]
     existing_ids = {location.id for location in locations}
     sources = list(dataset.sources)
     source_ids = {source.id for source in sources}
+    if "athens-atlas" not in source_ids:
+        return dataset
     for premise in PREMISES:
         if premise.id in existing_ids:
             continue
@@ -190,7 +238,7 @@ def add_municipal_sites(dataset: Dataset, hotspot_threshold: float | None) -> Da
                 sources.append(premise.source)
                 source_ids.add(premise.source.id)
 
-    if dataset.context and CURATED_SCHOOL_ID not in existing_ids:
+    if schools and dataset.context and CURATED_SCHOOL_ID not in existing_ids:
         school = next((
             feature for feature in dataset.context.features
             if feature.properties.get("kind") == "school"
@@ -208,6 +256,26 @@ def add_municipal_sites(dataset: Dataset, hotspot_threshold: float | None) -> Da
             )
             if candidate:
                 locations.append(candidate)
+
+    if schools and dataset.context:
+        locations.extend(_school_locations(dataset, schools, hotspot_threshold, locations))
+
+    for premise in PUBLIC_FACILITIES:
+        if premise.id in existing_ids:
+            continue
+        candidate = _candidate(
+            dataset, hotspot_threshold, premise.id, premise.name, premise.latitude, premise.longitude, premise.source,
+            _asset_notes(
+                premise.kind, premise.source, premise.notes, "atlas_cell",
+                coordinates_url=premise.coordinates_url, agency=premise.agency, address=premise.address,
+                advisory_only=True,
+            ),
+        )
+        if candidate and candidate.heat_c > 35:
+            locations.append(candidate)
+            if premise.source.id not in source_ids:
+                sources.append(premise.source)
+                source_ids.add(premise.source.id)
 
     return Dataset.model_validate(dataset.model_dump() | {
         "locations": [location.model_dump() for location in locations],
