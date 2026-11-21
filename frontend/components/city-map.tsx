@@ -81,20 +81,48 @@ function proposalPoint(location: Location, intervention?: Intervention) {
   return L.latLng(site?.latitude ?? location.latitude, site?.longitude ?? location.longitude)
 }
 
-function coolingZoneIcon(size: L.Point) {
-  return L.divIcon({
-    className: styles.coolingZone,
-    iconSize: size, iconAnchor: size.divideBy(2),
-  })
+function treeCoolingMask(points: L.Point[], radius: number, offsetY = 0) {
+  const mask = new Path2D()
+  for (const { x, y } of points) {
+    mask.moveTo(x + radius, y + offsetY)
+    mask.arc(x, y + offsetY, radius, 0, 2 * Math.PI)
+  }
+  return mask
 }
 
-function treeZoneBounds(map: L.Map, points: L.LatLng[]) {
-  const bounds = L.bounds(points.map((point) => map.project(point)))
-  // Expanding both radii by sqrt(2) keeps the padded corners inside the ellipse.
-  const diameter = bounds.getSize().add(L.point(22, 20)).multiplyBy(Math.SQRT2).round()
+function treeCoolingZone(map: L.Map, anchors: L.LatLng[]) {
+  const projected = anchors.map((anchor) => map.project(anchor))
+  const bounds = L.bounds(projected)
+  // Keep groups visible under the overview pin and hug the individual markers at close zoom.
+  const radius = Math.max(12, Math.min(20, Math.round(20 - (map.getZoom() - cityZoom) * 1.5)))
+  const margin = (radius + 5) * 2
+  const size = bounds.getSize().add(L.point(margin, margin)).ceil()
+  const halfSize = size.divideBy(2)
+  const origin = bounds.getCenter().subtract(halfSize)
+  const points = projected.map((point) => point.subtract(origin))
+  const canvas = document.createElement("canvas")
+  canvas.setAttribute("aria-hidden", "true")
+  const density = Math.min(2, window.devicePixelRatio || 1)
+  canvas.width = Math.ceil(size.x * density)
+  canvas.height = Math.ceil(size.y * density)
+  const brush = canvas.getContext("2d")
+  if (brush) {
+    brush.scale(canvas.width / size.x, canvas.height / size.y)
+    brush.fillStyle = "#166652"
+    brush.fill(treeCoolingMask(points, radius, 4))
+    brush.fillStyle = "#a2f0d3"
+    brush.fill(treeCoolingMask(points, radius))
+    const light = brush.createLinearGradient(0, 0, 0, size.y)
+    light.addColorStop(0, "#e3fff4")
+    light.addColorStop(0.52, "#8be6cb")
+    light.addColorStop(1, "#3ca596")
+    brush.fillStyle = light
+    brush.fill(treeCoolingMask(points, radius - 1.5))
+  }
   return {
     center: map.unproject(bounds.getCenter()),
-    size: L.point(Math.max(38, diameter.x), Math.max(30, diameter.y)),
+    badgeOffset: halfSize.y - 5,
+    icon: L.divIcon({ html: canvas, className: styles.coolingZone, iconSize: size, iconAnchor: halfSize }),
   }
 }
 
@@ -583,9 +611,9 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       const minimum = impact?.cooling_min_c
       const cooling = minimum == null ? null : `−${temperature(minimum)}`
       const open = () => setTreeSelection({ id: location.id, plan })
-      const points = [actual, ...(intervention?.siting?.anchors?.map((point) => L.latLng(point.latitude, point.longitude)) ?? [])]
+      const points = intervention?.siting?.anchors?.map((point) => L.latLng(point.latitude, point.longitude)) ?? []
       const zone = intervention?.type === "tree_planting" ? L.marker(actual, {
-        pane: "cooling-zones", icon: coolingZoneIcon(L.point(38, 30)), interactive: false, keyboard: false,
+        pane: "cooling-zones", icon: L.divIcon({ className: styles.coolingZone }), interactive: false, keyboard: false,
       }).addTo(geometry) : null
       const title = [location.name, coolingLabel(impact), impact?.metric].filter(Boolean).join(" · ")
       const badge = cooling ? L.marker(actual, {
@@ -596,13 +624,13 @@ export default function CityMap({ heat, trees, context, air, locations, selected
 
     const placeZones = () => {
       for (const { location, actual, points, zone, cooling, badge, title, open } of zones) {
-        const footprint = zone ? treeZoneBounds(map, points) : null
+        const footprint = zone ? treeCoolingZone(map, points.length ? points : [actual]) : null
         if (zone && footprint) {
-          zone.setLatLng(footprint.center).setIcon(coolingZoneIcon(footprint.size))
+          zone.setLatLng(footprint.center).setIcon(footprint.icon)
           zone.getElement()?.setAttribute("data-cooling-zone", location.id)
         }
         if (badge && cooling) {
-          badge.setLatLng(footprint?.center ?? actual).setIcon(temperatureBadge(cooling, Math.max(33, (footprint?.size.y ?? 0) / 2)))
+          badge.setLatLng(footprint?.center ?? actual).setIcon(temperatureBadge(cooling, Math.max(33, footprint?.badgeOffset ?? 0)))
           const element = badge.getElement()
           element?.setAttribute("aria-label", title)
           element?.setAttribute("data-impact-location", location.id)

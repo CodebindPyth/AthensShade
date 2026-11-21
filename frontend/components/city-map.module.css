@@ -168,11 +168,13 @@
 }
 .mapCanvas .whiteTree svg { padding: 1px; stroke-width: 2.5px; }
 .mapCanvas .coolingZone {
-  border: 1px solid #cffff1;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at 44% 35%, #d9fff1e8 8%, #89f0cec9 54%, #34ad9fa6 80%, #19898266 100%);
-  box-shadow: inset 0 0 0 3px #a2fbdd70, inset 0 -7px 14px #047c7770, 0 5px 0 -1px #09675fc4, 0 11px 15px -7px #124740ad;
   pointer-events: none;
+}
+.mapCanvas .coolingZone canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 3px 2px #164a42a6);
 }
 .mapCanvas .civicImpactPin::after {
   position: absolute;
