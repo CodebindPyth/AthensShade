@@ -35,6 +35,7 @@ BBOXES = {
     "petralona": "23.7010,37.9590,23.7150,37.9705",
     "platonos-perimeter": "23.7101,37.9853,23.7139,37.9890",
     "athanaton-perimeter": "23.7725,37.9832,23.7776,37.9871",
+    "pangrati-north": "23.7390,37.9695,23.7525,37.9786",
     "center-perimeter": "23.7282,37.9777,23.7327,37.9840",
     "petralona-perimeter": "23.7130,37.9634,23.7168,37.9690",
     "larissis-perimeter": "23.7197,37.9898,23.7232,37.9936",
@@ -74,6 +75,9 @@ AREAS = {
     "siting-pantazopoulou": ("way", "49014638"),
     "siting-syntagma": ("relation", "16363966"),
     "siting-voutie": ("way", "68528408"),
+    "siting-goudi-army-park": ("way", "489448986"),
+    "siting-chorofylakis": ("way", "32111469"),
+    "siting-rigillis": ("way", "319859811"),
 }
 STASY_STATIONS = "https://www.stasy.gr/wp-content/uploads/2025/10/25PROC017683325.pdf"
 UNDERGROUND_CONSTRAINTS = {
@@ -111,7 +115,8 @@ VEHICLE_ACCESS = {"yes", "permissive", "designated", "destination", "delivery"}
 OBSTACLE_AREAS = {
     "amenity": {"fountain", "parking"},
     "leisure": {"playground", "pitch", "outdoor_seating", "sports_centre"},
-    "natural": {"water"},
+    "natural": {"water", "wood"},
+    "landuse": {"forest"},
 }
 TO_METERS = Transformer.from_crs(4326, 2100, always_xy=True).transform
 TO_LON_LAT = Transformer.from_crs(2100, 4326, always_xy=True).transform
@@ -289,6 +294,12 @@ def compile_snapshot(atlas_path, raw, snapshot_date):
     nodes, xy, ways, relations, lines = load_geometry(raw)
     roads, road_masks, obstacle_masks = masks(nodes, xy, ways, lines)
     hot_cells = red_atlas_cells(city)
+    city_limits = union_all([
+        transform(make_valid(shape(feature["geometry"])), TO_METERS, interleaved=False)
+        for feature in city["context"]["features"] if feature["properties"].get("kind") == "district"
+    ])
+    # The adjacent sculpture gallery has its own venue and managed grounds.
+    gallery, _ = area_geometry("way", "489448988", ways, relations, lines)
     # /map includes whole OSM ways crossing a tile boundary. Only the area
     # within the requested tiles has surrounding street and obstacle coverage.
     coverage = union_all([
@@ -309,7 +320,10 @@ def compile_snapshot(atlas_path, raw, snapshot_date):
             if reference is not None and len(nearby_geometries(road_masks, reference)):
                 blocked.append(site_id)
             continue
-        safe = clear_geometry(area.intersection(coverage), road_masks, obstacle_masks)
+        area = area.intersection(coverage).intersection(city_limits)
+        if site_id == "siting-goudi-army-park":
+            area = area.difference(gallery)
+        safe = clear_geometry(area, road_masks, obstacle_masks)
         safe = safe.intersection(union_all(nearby_geometries(hot_cells, safe)))
         # Preserve the traffic and heat-cell boundaries following simplification
         # and rounding at seven decimal places for the web map.

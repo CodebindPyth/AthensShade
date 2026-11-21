@@ -78,6 +78,7 @@ class MunicipalAdvice(BaseModel):
     source: Literal["local_model", "verified_template"]
     model: str | None
     recommendation: str
+    studies: dict[Literal["tree_planting", "green_roof"], str]
 
 
 class _GuidanceSelection(BaseModel):
@@ -184,12 +185,27 @@ class LocalPlanCardEditor:
         )
 
     def advise_municipal_site(self, site: RankedLocation, notes: list[str]) -> MunicipalAdvice:
-        options = {f"site-{index}": note for index, note in enumerate(notes)}
+        asset = site.municipal_asset or {}
+        kind = asset.get("kind")
+        planting_space = {
+            "school": "Σκίαση προαυλίου με δέντρα, με ελεύθερες τις διαδρομές και τον χώρο παιχνιδιού.",
+            "fire": "Δέντρα μόνο σε χώρο πεζών που δεν επηρεάζει έξοδο οχημάτων και ελιγμούς.",
+            "hospital": "Δέντρα στον χώρο αναμονής, με ελεύθερη πρόσβαση ασθενοφόρων και πεζών.",
+            "police": "Δέντρα σε επιτρεπόμενο προαύλιο με ελεύθερες τις υπηρεσιακές διελεύσεις.",
+            "court": "Δέντρα σε χώρο αναμονής, με ελεύθερες τις εισόδους και τις οδεύσεις διαφυγής.",
+            "kep": "Δέντρα σε επαρκή χώρο κοντά στην αναμονή, με ελεύθερη την προσβάσιμη είσοδο.",
+        }.get(kind, "Δέντρα σε κατάλληλο προαύλιο, αφού μετρηθούν ο χώρος και οι οδεύσεις.")
+        if asset.get("heritage"):
+            roof = "Φυτεμένο δώμα ως αντικείμενο μελέτης, εφόσον εγκριθεί η επέμβαση στο προστατευόμενο κτίριο και επαρκεί η πλάκα."
+        else:
+            roof = "Φυτεμένο δώμα σε διαθέσιμη επιφάνεια, μετά από έλεγχο φορτίων, στεγάνωσης, αποστράγγισης και άρδευσης."
+        studies = {"tree_planting": f"{planting_space} Έλεγχος ριζοβολίας και δικτύων.", "green_roof": roof}
+        options = {"trees": studies["tree_planting"], "roof": roof, "site": notes[0]}
         scenario = json.dumps({
             "site": site.name,
             "goal": "Choose the safest first intervention study for a verified hot municipal site",
-            "asset": (site.municipal_asset or {}).get("kind"),
-            "heritage": bool((site.municipal_asset or {}).get("heritage")),
+            "asset": kind,
+            "heritage": bool(asset.get("heritage")),
             "hotspot": site.heat_hotspot,
         }, ensure_ascii=False)
         choice = self._choose(scenario, tuple(options.items()))
@@ -197,6 +213,7 @@ class LocalPlanCardEditor:
             source="local_model" if choice else "verified_template",
             model=self._model if choice else None,
             recommendation=options[choice] if choice else notes[0],
+            studies=studies,
         )
 
     def _choose(self, scenario: str, options: tuple[tuple[str, str], ...]) -> str | None:

@@ -170,6 +170,36 @@
 
 .mapCanvas .unitPin { color: #145a43; background: #fff; border: 1px solid #395949; border-radius: 50%; }
 .mapCanvas .unitPin svg { display: block; width: 100%; height: 100%; }
+.mapCanvas .whiteTree {
+  color: #fff;
+  background: #19553de8;
+  border: 1px solid #edfff2;
+  box-shadow: 0 1px 3px #173c36a6;
+}
+.mapCanvas .whiteTree svg { padding: 1px; stroke-width: 2.5px; }
+.mapCanvas .coolingZone {
+  border: 1px solid #cffff1;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 47% 38%, #e1ffe9d9 4%, #74e8c6a8 48%, #159f9350 72%, #168c8a17 100%);
+  box-shadow: inset 0 0 0 3px #a2fbdd70, inset 0 -6px 12px #047c7770, 0 5px 0 -1px #09837c81, 0 10px 15px -6px #15555f99;
+  pointer-events: none;
+}
+.mapCanvas .coolingZoneUnknown {
+  border-color: #e6ebef;
+  background: radial-gradient(ellipse at 48% 34%, #edf4f0ae, #71958c69 57%, #698b8720 100%);
+  box-shadow: inset 0 0 0 2px #e8f4ed70, 0 5px 0 -1px #52727678, 0 8px 13px -5px #334d5760;
+}
+.mapCanvas .civicImpactPin::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 7px;
+  height: 7px;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  background: #4bddaa;
+  content: "";
+}
 .mapCanvas .treePin[hidden] { display: none; }
 
 .mapCanvas .impactLabel:hover,
@@ -210,5 +240,6 @@
 
 .impactDetail p { margin: 3px 0; }
 .impactDetail .impactUnits { color: #165647; font-weight: 800; }
+.zoomToTrees { display: inline-flex; align-items: center; gap: 4px; color: #145740; border: 1px solid #b8d8c8; border-radius: 4px; background: #f1fbf5; padding: 4px 7px; margin: 0 15px 6px 0; cursor: pointer; font-size: 11px; }
 .impactDetail .impactArea { font-weight: 700; }
 .impactDetail a { color: #07536e; text-underline-offset: 2px; }

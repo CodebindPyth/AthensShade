@@ -43,3 +43,18 @@
 .siting summary, .municipal summary { cursor: pointer; color: #215743; font-weight: 600; }
 .municipal ul { margin: 4px 0; padding-left: 15px; }
 .siting a, .municipal a { color: #19574a; text-underline-offset: 2px; }
+.buildingStudies {
+  display: grid;
+  gap: 5px;
+  padding: 0;
+  list-style: none;
+}
+
+.buildingStudies li {
+  padding: 6px 8px;
+  border-left: 2px solid #0b8469;
+  border-radius: 3px;
+  background: #eaf7f0;
+}
+
+.buildingStudies p { margin: 2px 0 0; }

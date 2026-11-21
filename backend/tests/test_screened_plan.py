@@ -7,7 +7,7 @@ from app.analysis import ATHENS_RED_SURFACE_TEMPERATURE_C
 from app.main import DEFAULT_DATASET_PATH, create_app, load_dataset
 from app.models import OptimizeRequest
 from app.municipal_sites import _inside_ring, _point_feature
-from app.optimizer import optimize
+from app.optimizer import EAST_ATHENS_LONGITUDE, optimize
 
 
 def test_ground_options_use_screened_geometry_and_respect_capacity():
@@ -20,6 +20,7 @@ def test_ground_options_use_screened_geometry_and_respect_capacity():
     assert len({item.location_id for item in plan.selected}) == len(plan.selected)
     assert len(plan.selected) > len(basic.selected)
     assert {"tree_planting", "shade_structure"} <= {item.type for item in plan.selected}
+    assert any(item.type == "tree_planting" and item.siting["evidence"]["longitude"] >= EAST_ATHENS_LONGITUDE for item in plan.selected)
     assert sum(item.shade_impact.unit_count for item in plan.selected if item.type == "tree_planting") > sum(
         item.shade_impact.unit_count for item in basic.selected if item.type == "tree_planting"
     )
@@ -61,4 +62,10 @@ def test_municipal_advice_is_grounded_in_registered_heat_site(monkeypatch):
         response = client.get("/api/locations/municipal-school-63-lykeio/municipal-advice")
         assert response.status_code == 200
         assert response.json()["recommendation"] in site["municipal_asset"]["notes"]
+        assert set(response.json()["studies"]) == {"tree_planting", "green_roof"}
+        for kind in ("police", "fire", "hospital", "kep", "court"):
+            public_site = next(row for row in locations if (row["municipal_asset"] or {}).get("kind") == kind)
+            advice = client.get(f"/api/locations/{public_site['id']}/municipal-advice")
+            assert advice.status_code == 200
+            assert set(advice.json()["studies"]) == {"tree_planting", "green_roof"}
         assert client.get("/api/locations/avdi/municipal-advice").status_code == 404

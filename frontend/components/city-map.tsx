@@ -29,7 +29,6 @@ type MapProps = {
 
 const cityCenter: L.LatLngExpression = [37.991, 23.731]
 const cityZoom = 12
-const impactTileRadius = 23
 const impactLabelSize = L.point(148, 56)
 const impactLabelOffsets = [
   [0, 50], [100, 30], [-100, 30], [0, -50],
@@ -84,6 +83,15 @@ function markerGlyph(appearance: ReturnType<typeof interventionAppearance>) {
 function proposalPoint(location: Location, intervention?: Intervention) {
   const site = intervention?.siting?.evidence
   return L.latLng(site?.latitude ?? location.latitude, site?.longitude ?? location.longitude)
+}
+
+function coolingZoneIcon(projectedRadius: number, coolingKnown: boolean) {
+  const width = Math.max(54, Math.min(214, Math.round(projectedRadius * 2 + 30)))
+  const height = Math.round(width * 0.77)
+  return L.divIcon({
+    className: `${styles.coolingZone}${coolingKnown ? "" : ` ${styles.coolingZoneUnknown}`}`,
+    iconSize: [width, height], iconAnchor: [width / 2, height / 2],
+  })
 }
 
 function proposalAppearance(location: Location, intervention?: Intervention) {
@@ -222,9 +230,10 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       ?? visibleMunicipalLocations.find((location) => location.id === treeSelection.id)
       ?? null
     : null
+  const activeIntervention = activeTree ? interventionByLocation.get(activeTree.id) : undefined
   const activeImpact = activeTree && showImpact ? impactByLocation.get(activeTree.id) : undefined
-  const activeArea = activeTree && showImpact ? impactArea(interventionByLocation.get(activeTree.id)) : null
-  const activeUnits = activeTree && showImpact ? proposedUnits(interventionByLocation.get(activeTree.id)) : null
+  const activeArea = showImpact ? impactArea(activeIntervention) : null
+  const activeUnits = showImpact ? proposedUnits(activeIntervention) : null
   const cardVisible = cardPosition !== null
 
   useEffect(() => {
@@ -240,7 +249,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     }).setView(cityCenter, cityZoom)
     instance.current = map
     map.attributionControl.setPrefix(false)
-    for (const [name, zIndex] of [["heat", 380], ["context", 410], ["trees", 420], ["plantings", 425], ["impact", 430], ["neighborhood-labels", 605], ["proposal-anchors", 500], ["impact-labels", 625]] as const) {
+    for (const [name, zIndex] of [["heat", 380], ["context", 410], ["trees", 420], ["plantings", 425], ["impact", 430], ["cooling-zones", 435], ["neighborhood-labels", 605], ["proposal-anchors", 500], ["impact-labels", 625]] as const) {
       map.createPane(name).style.zIndex = String(zIndex)
     }
     map.getPane("plantings")?.style.setProperty("pointer-events", "none")
@@ -337,11 +346,11 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     const layer = L.geoJSON(heat, {
       pane: "heat",
       style: (feature) => ({
-        color: "#fff7e9",
+        color: showImpact ? "#e0e8e8" : "#fff7e9",
         weight: 0.45,
         opacity: 0.53,
-        fillColor: heatColor(temperatureOf(feature), breaks),
-        fillOpacity: 0.68,
+        fillColor: heatColor(temperatureOf(feature), breaks, showImpact),
+        fillOpacity: showImpact ? 0.39 : 0.68,
       }),
       onEachFeature: (feature, shape) => {
         const value = temperatureOf(feature)
@@ -359,7 +368,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       if (!areaBounds.current) fitCity(map, thermalBounds.current)
     }
     return () => { layer.remove() }
-  }, [breaks, heat, onSelectTile, showHeat])
+  }, [breaks, heat, onSelectTile, showHeat, showImpact])
 
   useEffect(() => {
     const map = instance.current
@@ -442,9 +451,9 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     const byId = new Map<string, L.Marker>()
     for (const location of visibleMunicipalLocations) {
       const appearance = civicAppearance(location.municipal_asset?.kind)
-      const title = `${appearance.label} · ${location.name}`
+      const title = `${appearance.label} · ${location.name}${showImpact ? " · Μελέτη δέντρων και φυτεμένου δώματος" : ""}`
       const icon = L.divIcon({
-        html: markerGlyph(appearance), className: styles.treePin,
+        html: markerGlyph(appearance), className: `${styles.treePin}${showImpact ? ` ${styles.civicImpactPin}` : ""}`,
         iconSize: [28, 28], iconAnchor: [14, 14],
       })
       const marker = L.marker(proposalPoint(location), {
@@ -455,6 +464,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       element?.setAttribute("aria-expanded", "false")
       element?.setAttribute("data-municipal-location", location.id)
       element?.setAttribute("data-facility-kind", location.municipal_asset?.kind ?? "building")
+      if (showImpact) element?.setAttribute("data-impact-facility", location.id)
       element?.style.setProperty("--intervention-color", appearance.color)
       const toggle = () => setTreeSelection((previous) => (
         previous?.plan === plan && previous.id === location.id ? null : { id: location.id, plan }
@@ -484,7 +494,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       buildings.remove()
       municipalMarkers.current = new Map()
     }
-  }, [plan, visibleMunicipalLocations])
+  }, [plan, showImpact, visibleMunicipalLocations])
 
   useEffect(() => {
     const map = instance.current
@@ -501,7 +511,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       const quantity = intervention?.shade_impact?.unit_count
       const label = [location.name, proposedUnits(intervention) ?? appearance.label].join(" · ")
       const icon = L.divIcon({
-        html: `${markerGlyph(appearance)}${quantity && quantity > 1 ? `<span class="${styles.pinCount}" aria-hidden="true">${numeric(quantity)}</span>` : ""}`,
+        html: `${markerGlyph(appearance)}${quantity && type === "tree_planting" ? `<span class="${styles.pinCount}" aria-hidden="true">+${numeric(quantity)}</span>` : ""}`,
         iconSize: [32, 32],
         iconAnchor: [16, 16],
         className: styles.treePin,
@@ -517,6 +527,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       element?.setAttribute("aria-expanded", "false")
       element?.setAttribute("data-tree-location", location.id)
       element?.setAttribute("data-intervention-type", type)
+      if (location.municipal_asset) element?.setAttribute("data-facility-kind", location.municipal_asset.kind)
       const anchor = marker.getLatLng()
       element?.setAttribute("data-site-latitude", String(anchor.lat))
       element?.setAttribute("data-site-longitude", String(anchor.lng))
@@ -541,16 +552,21 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     const place = () => {
       anchors.clearLayers()
       if (map.getZoom() < 15.5) return
+      const view = map.getBounds().pad(0.15)
+      const closeView = map.getZoom() >= 17
       for (const item of plan.selected) {
-        const color = interventionAppearance(item.type).color
+        const appearance = interventionAppearance(item.type)
+        const isTree = item.type === "tree_planting"
         const units = proposedUnits(item)
         for (const { latitude, longitude } of item.siting?.anchors ?? []) {
-          const point = map.getZoom() >= 17 ? L.marker([latitude, longitude], {
-            pane: "proposal-anchors", title: item.type === "tree_planting" ? "Προτεινόμενο δέντρο" : "Προτεινόμενο σκίαστρο",
-            icon: L.divIcon({ className: styles.unitPin, html: markerGlyph(interventionAppearance(item.type)), iconSize: [14, 14], iconAnchor: [7, 7] }),
-          }).addTo(anchors) : L.circleMarker([latitude, longitude], {
+          const latLng = L.latLng(latitude, longitude)
+          if (!view.contains(latLng)) continue
+          const point = closeView ? L.marker(latLng, {
+            pane: "proposal-anchors", title: isTree ? "Προτεινόμενο δέντρο" : "Προτεινόμενο σκίαστρο",
+            icon: L.divIcon({ className: `${styles.unitPin}${isTree ? ` ${styles.whiteTree}` : ""}`, html: markerGlyph(appearance), iconSize: [14, 14], iconAnchor: [7, 7] }),
+          }).addTo(anchors) : L.circleMarker(latLng, {
             pane: "proposal-anchors", radius: 4, color: "white", weight: 1.3,
-            fillColor: color, fillOpacity: 1, bubblingMouseEvents: false,
+            fillColor: appearance.color, fillOpacity: 1, bubblingMouseEvents: false,
           }).addTo(anchors)
           point.getElement()?.setAttribute("data-proposal-anchor", item.location_id)
           if (units) point.bindTooltip(tooltip(units))
@@ -559,8 +575,8 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       }
     }
     place()
-    map.on("zoomend", place)
-    return () => { map.off("zoomend", place); anchors.remove() }
+    map.on("moveend", place)
+    return () => { map.off("moveend", place); anchors.remove() }
   }, [plan])
 
   useEffect(() => {
@@ -578,7 +594,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     })
     const geometry = L.layerGroup().addTo(map)
     const labels = L.layerGroup().addTo(map)
-    const tiles = plannedLocations.map((location) => {
+    const zones = plannedLocations.map((location) => {
       const intervention = interventionByLocation.get(location.id)
       const actual = proposalPoint(location, intervention)
       const impact = impactByLocation.get(location.id)
@@ -596,11 +612,10 @@ export default function CityMap({ heat, trees, context, air, locations, selected
           style: { color: "#176544", weight: 2, dashArray: "5 4", fillColor: "#51a575", fillOpacity: 0.18 },
         }).addTo(geometry)
       }
-      const tile = L.rectangle(L.latLngBounds(actual, actual), {
-        pane: "impact", color, weight: 2, fillColor: color, fillOpacity: 0.2,
-        dashArray: cooling ? undefined : "3 4", bubblingMouseEvents: false,
+      const zone = L.marker(actual, {
+        pane: "cooling-zones", icon: coolingZoneIcon(0, Boolean(cooling)), interactive: false, keyboard: false,
       }).addTo(geometry)
-      tile.on("click", open)
+      const proposedPoints = intervention?.siting?.anchors?.map((anchor) => L.latLng(anchor.latitude, anchor.longitude)) ?? []
       const guide = L.polyline([], {
         pane: "impact", color, weight: 1, opacity: 0.75, interactive: false,
       }).addTo(geometry)
@@ -619,29 +634,29 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       element?.setAttribute("data-impact-location", location.id)
       marker.on("click", open)
       supportSpaceKey(element, open)
-      return { actual, tile, guide, marker }
+      return { actual, zone, proposedPoints, cooling: Boolean(cooling), guide, marker }
     })
 
-    const placeTiles = () => {
+    const placeZones = () => {
       const occupied: L.Point[] = []
       const pinCenters = [...treeMarkers.current.values(), ...municipalMarkers.current.values()]
         .filter((marker) => !marker.getElement()?.hidden)
         .map((marker) => map.project(marker.getLatLng()))
-      for (const { actual, tile, guide, marker } of tiles) {
+      for (const { actual, zone, proposedPoints, cooling, guide, marker } of zones) {
         const origin = map.project(actual)
-        const radius = L.point(impactTileRadius, impactTileRadius)
+        const radius = proposedPoints.reduce((max, point) => Math.max(max, origin.distanceTo(map.project(point))), 0)
         const center = impactLabelPosition(origin, occupied, pinCenters)
         occupied.push(center)
         const labelPosition = map.unproject(center)
-        tile.setBounds(L.latLngBounds(map.unproject(origin.subtract(radius)), map.unproject(origin.add(radius))))
+        zone.setIcon(coolingZoneIcon(radius, cooling))
         guide.setLatLngs([actual, labelPosition])
         marker.setLatLng(labelPosition)
       }
     }
-    placeTiles()
-    map.on("zoomend", placeTiles)
+    placeZones()
+    map.on("zoomend", placeZones)
     return () => {
-      map.off("zoomend", placeTiles)
+      map.off("zoomend", placeZones)
       geometry.remove()
       labels.remove()
       if (instance.current === map) map.setView(previousView.center, previousView.zoom, { animate: false })
@@ -650,12 +665,18 @@ export default function CityMap({ heat, trees, context, air, locations, selected
 
   useEffect(() => {
     for (const [id, marker] of treeMarkers.current) {
-      marker.getElement()?.setAttribute("aria-expanded", String(id === activeTree?.id))
+      const element = marker.getElement()
+      element?.setAttribute("aria-expanded", String(id === activeTree?.id))
+      if (element?.hasAttribute("data-facility-kind")) {
+        element.classList.toggle(styles.civicImpactPin, showImpact)
+        if (showImpact) element.setAttribute("data-impact-facility", id)
+        else element.removeAttribute("data-impact-facility")
+      }
     }
     for (const [id, marker] of municipalMarkers.current) {
       marker.getElement()?.setAttribute("aria-expanded", String(id === activeTree?.id))
     }
-  }, [activeTree, plan])
+  }, [activeTree, plan, showImpact])
 
   useEffect(() => {
     const map = instance.current
@@ -769,6 +790,11 @@ export default function CityMap({ heat, trees, context, air, locations, selected
           <span className={styles.treePopupArrow} style={{ left: cardPosition.anchor }} aria-hidden="true" />
           <button className={styles.treePopupClose} type="button" aria-label="Κλείσιμο κάρτας παρέμβασης" ref={treeCloseButton} onClick={closeTree}><X size={16} /></button>
           <div className={styles.treePopupScroll} style={{ maxHeight: cardPosition.height }} tabIndex={0}>
+            {activeIntervention?.type === "tree_planting" && (
+              <button type="button" className={styles.zoomToTrees} onClick={() => instance.current?.setView(proposalPoint(activeTree, activeIntervention), 18)}>
+                <Crosshair size={13} aria-hidden="true" /> Εστίαση στις θέσεις φύτευσης
+              </button>
+            )}
             {(activeImpact || activeArea) && (
               <section className={styles.impactDetail} aria-label="Υποθετική τοπική ψύξη">
                 <strong>{coolingLabel(activeImpact) ?? "Χωρίς αριθμητική εκτίμηση"}</strong>
@@ -781,8 +807,8 @@ export default function CityMap({ heat, trees, context, air, locations, selected
               </section>
             )}
             {plan && interventionByLocation.has(activeTree.id)
-              ? <TreePopupCard key={activeTree.id} location={activeTree} plan={plan} />
-              : <MunicipalPopupCard key={activeTree.id} location={activeTree} />}
+              ? <TreePopupCard key={activeTree.id} location={activeTree} plan={plan} showImpact={showImpact} />
+              : <MunicipalPopupCard key={activeTree.id} location={activeTree} showImpact={showImpact} />}
           </div>
         </div>
       )}
@@ -815,17 +841,17 @@ export default function CityMap({ heat, trees, context, air, locations, selected
             <i aria-hidden="true" />
             <div>
               <strong>Υποθετική τοπική ψύξη</strong>
-              <span>°C επιφάνειας και m² εκτιμώμενης σκιάς · πράσινο περίγραμμα: ζώνη προς αυτοψία</span>
+              <span>Ζώνες ψύξης ενδεικτικής έκτασης · δημόσια κτίρια με προτάσεις φύτευσης και φυτεμένου δώματος</span>
             </div>
           </div>
         )}
         {showHeat && (
           <div>
-            <strong>Θερμοκρασία επιφάνειας (°C)</strong>
+            <strong>{showImpact ? "Ιστορική θερμοκρασία επιφάνειας (°C)" : "Θερμοκρασία επιφάνειας (°C)"}</strong>
             <div className="legend-bands">
               {[breaks[0] - 1, ...breaks].map((value, index) => (
                 <div key={value} title={index === 0 ? `Κάτω από ${temperature(breaks[0])}` : index < breaks.length ? `Από ${temperature(value)} έως κάτω από ${temperature(breaks[index])}` : `Από ${temperature(value)} και άνω`}>
-                  <span style={{ background: heatColor(value, breaks) }} />
+                  <span style={{ background: heatColor(value, breaks, showImpact) }} />
                   {index === 0 ? `<${numeric(breaks[0])}` : index === breaks.length ? `${numeric(value)}+` : numeric(value)}
                 </div>
               ))}

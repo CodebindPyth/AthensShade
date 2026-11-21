@@ -6,9 +6,9 @@ import { euros, feasibilityLabel, interventionLabel, numeric, shadeArea, shadeLa
 import { civicAppearance } from "./intervention-symbol"
 import styles from "./tree-popup-card.module.css"
 
-type TreePopupCardProps = { location: Location; plan: Plan }
+type TreePopupCardProps = { location: Location; plan: Plan; showImpact: boolean }
 
-export function TreePopupCard({ location, plan }: TreePopupCardProps) {
+export function TreePopupCard({ location, plan, showImpact }: TreePopupCardProps) {
   const { budget_eur, include_inspection, strategy, priority_only } = plan
   const [brief, setBrief] = useState<SiteCardResponse | null>(null)
   const [unavailable, setUnavailable] = useState(false)
@@ -78,7 +78,7 @@ export function TreePopupCard({ location, plan }: TreePopupCardProps) {
           <p className={styles.context}>{unavailable ? "Η εκτίμηση της θέσης δεν είναι διαθέσιμη αυτή τη στιγμή." : "Υπολογίζεται η εκτίμηση για αυτή τη θέση…"}</p>
         )}
       </div>
-      {location.municipal_asset && <MunicipalOptions location={location} />}
+      {location.municipal_asset && <MunicipalOptions location={location} showImpact={showImpact} />}
     </section>
   )
 }
@@ -120,7 +120,7 @@ function SitingDetails({ siting }: { siting: Siting }) {
   )
 }
 
-export function MunicipalPopupCard({ location }: { location: Location }) {
+export function MunicipalPopupCard({ location, showImpact }: { location: Location; showImpact: boolean }) {
   const { agency, address, kind, advisory_only } = location.municipal_asset ?? {}
   const { label } = civicAppearance(kind)
   return (
@@ -133,12 +133,12 @@ export function MunicipalPopupCard({ location }: { location: Location }) {
         {location.heat_c !== null && <p className={styles.context}>{temperature(location.heat_c)} ιστορική θερμοκρασία επιφάνειας</p>}
         {advisory_only && <p className={styles.context}>Ενδεικτικές λύσεις προς συζήτηση με τον αρμόδιο φορέα.</p>}
       </header>
-      <MunicipalOptions location={location} />
+      <MunicipalOptions location={location} showImpact={showImpact} />
     </section>
   )
 }
 
-function MunicipalOptions({ location }: { location: Location }) {
+function MunicipalOptions({ location, showImpact }: { location: Location; showImpact: boolean }) {
   const [advice, setAdvice] = useState<MunicipalAdvice | null>(null)
   useEffect(() => {
     const controller = new AbortController()
@@ -155,6 +155,10 @@ function MunicipalOptions({ location }: { location: Location }) {
     <section className={styles.municipal} aria-label="Λύσεις προς μελέτη για το κτίριο">
       <p className={styles.origin}>{advice?.source === "local_model" ? <><Sparkles size={13} aria-hidden="true" /> Πρόταση ελέγχου από τοπικό AI</> : "Λύσεις προς μελέτη"}</p>
       <p>{first}</p>
+      {showImpact && <ul className={styles.buildingStudies} aria-label="Επιλογές προσαρμογής κτιρίου">
+        <li><strong>Φύτευση δέντρων</strong><p>{advice?.studies?.tree_planting ?? "Μελέτη φύτευσης στον ελεύθερο χώρο του κτιρίου."}</p></li>
+        <li><strong>Φυτεμένο δώμα</strong><p>{advice?.studies?.green_roof ?? "Έλεγχος διαθέσιμης επιφάνειας, φορτίων και στεγάνωσης."}</p></li>
+      </ul>}
       <details className={styles.details}>
         <summary>Άλλες επιλογές και πηγή</summary>
         <ul>{asset.notes.filter((note) => note !== first).map((note) => <li key={note}>{note}</li>)}</ul>

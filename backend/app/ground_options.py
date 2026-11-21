@@ -11,6 +11,7 @@ from .siting import SitingEvidence, load_siting
 TREE_SPACING_M = 5
 TREE_GRID_INSET_M = 1.5
 TREE_DEFICIT_THRESHOLD_PERCENT = 15
+TREE_LIMITS = {"siting-goudi-army-park": 120}
 TREE_COST_SOURCE = "athens-tree-tender"
 SHADE_COST_SOURCE = "athens-shade-tender"
 SITING_SOURCE = Source(
@@ -90,6 +91,7 @@ def add_ground_sites(dataset: Dataset, threshold: float | None) -> Dataset:
 def new_pedestrian_options(location: Location, evidence: SitingEvidence) -> list[Intervention]:
     result = []
     tree_capacity = int(evidence.available_area_m2 // TREE_SPACING_M ** 2)
+    tree_capacity = min(tree_capacity, TREE_LIMITS.get(location.id, tree_capacity))
     if tree_capacity > 0 and location.canopy_percent is not None and location.canopy_percent < TREE_DEFICIT_THRESHOLD_PERCENT:
         result.append(Intervention(
             id=f"{location.id}-tree_planting",

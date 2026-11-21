@@ -168,6 +168,7 @@ export type MunicipalAdvice = {
   source: "local_model" | "verified_template"
   model: string | null
   recommendation: string
+  studies?: { tree_planting: string; green_roof: string }
 }
 
 export type LayerName = "heat" | "trees" | "context"
