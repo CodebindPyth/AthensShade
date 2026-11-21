@@ -1,0 +1,142 @@
+import logging
+import os
+from functools import lru_cache
+from pathlib import Path
+from typing import Annotated, Literal
+
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ValidationError
+
+from .analysis import TREE_DEFICIT_THRESHOLD_PERCENT, AthensAnalysis
+from .methodology import methodology
+from .models import (
+    CompareRequest,
+    CompareResponse,
+    Dataset,
+    GeoJSONCollection,
+    HealthResponse,
+    LocationAnalysis,
+    LocationsResponse,
+    MethodologyResponse,
+    OptimizeRequest,
+    Plan,
+    SourcesResponse,
+)
+from .optimizer import OptimizationError, optimize
+
+DEFAULT_DATASET_PATH = Path(__file__).resolve().parents[2] / "data" / "processed" / "athens.json"
+LOGGER = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=4)
+def load_dataset(path: Path, modified_ns: int, size: int) -> AthensAnalysis:
+    """Use the file signature so replacements are visible without restarting the API."""
+    return AthensAnalysis(Dataset.model_validate_json(path.read_bytes()))
+
+
+def create_app(dataset_path: Path | None = None) -> FastAPI:
+    app = FastAPI(
+        title="AthensShade Optimizer",
+        description="Athens heat and shade data with budget-constrained intervention scenarios.",
+        version="0.1.0",
+    )
+    default_origins = "http://localhost:3000,http://127.0.0.1:3000"
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            origin.strip()
+            for origin in os.getenv("ATHENSSHADE_CORS_ORIGINS", default_origins).split(",")
+            if origin.strip()
+        ],
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type"],
+    )
+    path = dataset_path or Path(os.getenv("ATHENSSHADE_DATA_PATH", str(DEFAULT_DATASET_PATH)))
+    api = APIRouter(prefix="/api")
+
+    def dataset_analysis() -> AthensAnalysis:
+        try:
+            stat = path.stat()
+            return load_dataset(path, stat.st_mtime_ns, stat.st_size)
+        except OSError as exc:
+            LOGGER.warning("Athens data file unavailable: %s", exc)
+        except ValidationError as exc:
+            LOGGER.error("Athens dataset failed validation (%s errors)", exc.error_count())
+        raise HTTPException(status_code=503, detail="Το σύνολο δεδομένων δεν είναι διαθέσιμο.")
+
+    @app.get("/health", include_in_schema=False)
+    @api.get("/health", tags=["Status"])
+    def health() -> HealthResponse:
+        try:
+            analysis = dataset_analysis()
+        except HTTPException:
+            return HealthResponse(status="dataset_unavailable", dataset_version=None)
+        return HealthResponse(status="ok", dataset_version=analysis.dataset.dataset_version)
+
+    @api.get("/locations", tags=["Locations"])
+    def locations(analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)]) -> LocationsResponse:
+        return LocationsResponse(
+            dataset_version=analysis.dataset.dataset_version,
+            heat_hotspot_threshold_c=analysis.hotspot_threshold,
+            tree_deficit_threshold_percent=TREE_DEFICIT_THRESHOLD_PERCENT,
+            locations=list(analysis.locations.values()),
+        )
+
+    @api.get("/locations/{location_id}/analysis", tags=["Locations"])
+    def explain_location(
+        location_id: str, analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)],
+    ) -> LocationAnalysis:
+        if location_id not in analysis.locations:
+            raise HTTPException(status_code=404, detail="Το σημείο δεν βρέθηκε.")
+        return analysis.location_analysis(location_id)
+
+    @api.get("/layers/{layer}", tags=["Map"])
+    def read_layer(
+        layer: Literal["heat", "trees", "context"],
+        analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)],
+    ) -> GeoJSONCollection:
+        data = analysis.dataset
+        layers = {"heat": data.heat, "trees": data.trees, "context": data.context}
+        return layers[layer] or GeoJSONCollection()
+
+    @api.get("/data-sources", tags=["Map"])
+    def data_sources(analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)]) -> SourcesResponse:
+        return SourcesResponse(dataset_version=analysis.dataset.dataset_version, sources=analysis.dataset.sources)
+
+    @api.get("/methodology", tags=["Planning"])
+    def planning_methodology() -> MethodologyResponse:
+        return methodology()
+
+    def get_plan(analysis: AthensAnalysis, request: OptimizeRequest) -> Plan:
+        try:
+            return optimize(analysis, request)
+        except OptimizationError as exc:
+            LOGGER.error("AthensShade optimization failed: %s", exc)
+            raise HTTPException(status_code=503, detail="Η βελτιστοποίηση δεν είναι διαθέσιμη.") from exc
+
+    @api.post("/optimize", tags=["Planning"])
+    def plan(request: OptimizeRequest, analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)]) -> Plan:
+        return get_plan(analysis, request)
+
+    @api.post("/scenarios/compare", tags=["Planning"])
+    def compare(
+        request: CompareRequest, analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)],
+    ) -> CompareResponse:
+        baseline = get_plan(analysis, request.baseline)
+        proposed = get_plan(analysis, request.proposed)
+        baseline_ids = {item.id for item in baseline.selected}
+        proposed_ids = {item.id for item in proposed.selected}
+        return CompareResponse(
+            baseline=baseline,
+            proposed=proposed,
+            added_ids=sorted(proposed_ids - baseline_ids),
+            removed_ids=sorted(baseline_ids - proposed_ids),
+            retained_ids=sorted(proposed_ids & baseline_ids),
+        )
+
+    app.include_router(api)
+    return app
+
+
+app = create_app()
