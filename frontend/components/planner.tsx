@@ -30,7 +30,7 @@ type PlannerProps = {
   locations: Map<string, Location>
 }
 
-const budgetPresets = [50_000, 100_000]
+const budgetPresets = [50_000, 100_000, 150_000]
 
 export function Planner(props: PlannerProps) {
   const { budget, includeInspection, plan, comparison, locations, onSelectLocation } = props
@@ -84,7 +84,7 @@ export function Planner(props: PlannerProps) {
               <nav aria-label="Ανάλυση πλάνου" className="plan-detail-links">
                 <a className="impact-evaluation-link" href="#city-brief">Σύνοψη για τον Δήμο ↓</a>
                 <a className="impact-evaluation-link" href="#cooling-estimates">Εκτίμηση ψύξης ↓</a>
-                <a className="impact-evaluation-link" href="#investment-appraisal">Εκτίμηση απόσβεσης ↓</a>
+                <a className="impact-evaluation-link" href="#plan-savings">Εξοικονόμηση χρημάτων ↓</a>
               </nav>
             )}
             {plan.selected.length === 0 ? (

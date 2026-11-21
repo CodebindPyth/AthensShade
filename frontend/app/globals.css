@@ -159,7 +159,7 @@ input[type="checkbox"] { flex: 0 0 auto; margin: 0; height: 18px; width: 18px; a
 .currency-input input::-webkit-inner-spin-button, .currency-input input::-webkit-outer-spin-button { appearance: none; margin: 0; }
 .currency-input input:focus-visible { outline: none; }
 .currency-input > span { padding-right: 12px; color: var(--muted); font-size: 18px; }
-.budget-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 3px 0 7px; }
+.budget-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 3px 0 7px; }
 .preset, .primary-button, .outline-button, .secondary-button { display: inline-flex; justify-content: center; align-items: center; gap: 8px; border: 1px solid var(--blue); border-radius: 6px; font-weight: 600; }
 .preset { min-height: 39px; background: #fff; color: var(--blue-deep); }
 .preset:hover, .outline-button:hover { background: var(--blue-soft); }

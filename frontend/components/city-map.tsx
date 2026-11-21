@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import L from "leaflet"
-import { Crosshair, Layers3, Minus, Plus, TreeDeciduous, X } from "lucide-react"
+import { Crosshair, Layers3, Minus, Plus, X } from "lucide-react"
 import type { Feature, FeatureCollection } from "geojson"
 import type { AirObservations, AirReading, Location, Plan } from "../lib/api"
 import { heatColor, heatThresholds, localObservationTime, numeric, temperature } from "../lib/format"
@@ -26,7 +26,39 @@ type MapProps = {
 
 const cityCenter: L.LatLngExpression = [37.991, 23.731]
 const cityZoom = 12
-const treeGlyph = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5m0 0 3.5-3.5M12 17l-2.5-2.5M7 17a4 4 0 0 1-1.3-7.8A5.8 5.8 0 0 1 11.5 3a6 6 0 0 1 5.8 4.4A4.9 4.9 0 0 1 16 17h-1"/></svg>'
+type MarkerAppearance = { label: string; color: string; path: string }
+const interventionMarkers = new Map<string, MarkerAppearance>([
+  ["tree_planting", {
+    label: "Δέντρα",
+    color: "#176544",
+    path: "M12 22v-5m0 0 3.5-3.5M12 17l-2.5-2.5M7 17a4 4 0 0 1-1.3-7.8A5.8 5.8 0 0 1 11.5 3a6 6 0 0 1 5.8 4.4A4.9 4.9 0 0 1 16 17h-1",
+  }],
+  ["shade_structure", {
+    label: "Σκίαστρα",
+    color: "#255794",
+    path: "M3 12a9 9 0 0 1 18 0H3Zm9 0v6a2 2 0 0 0 4 0",
+  }],
+  ["shaded_bench", {
+    label: "Σκιασμένα παγκάκια",
+    color: "#86541d",
+    path: "M3 10 6 5h12l3 5H3Zm3 0v10m12-10v10M6 16h12M8 19v-3m8 3v-3",
+  }],
+  ["green_roof", {
+    label: "Φυτεμένα δώματα",
+    color: "#685199",
+    path: "m3 11 9-7 9 7M5 10v10h14V10m-7 7v3m0-3c0-3 2-4 4-4 0 2-1 4-4 4Z",
+  }],
+  ["greenery", {
+    label: "Χώροι πρασίνου",
+    color: "#5b6e22",
+    path: "M12 21v-8m0 2C6 15 4 12 4 8c5 0 8 3 8 7Zm0-2c0-5 3-8 8-8 0 5-3 8-8 8Z",
+  }],
+])
+const defaultInterventionMarker: MarkerAppearance = {
+  label: "Παρέμβαση",
+  color: "#46546b",
+  path: "M20 10c0 5-8 10-8 10S4 15 4 10a8 8 0 1 1 16 0Z M12 10h.01",
+}
 const minimumTreeDistance = 36
 const canopyBands = [
   { below: 5, label: "<5%", color: "#b2d6b1", opacity: 0.24 },
@@ -109,10 +141,11 @@ export default function CityMap({ heat, trees, context, air, locations, selected
   const [tilesAvailable, setTilesAvailable] = useState(true)
   const [scale, setScale] = useState({ label: "1 km", width: 95 })
   const breaks = useMemo(() => heatThresholds(heat?.features.flatMap((feature) => temperatureOf(feature) ?? []) ?? [], hotspotThreshold), [heat, hotspotThreshold])
-  const plannedLocations = useMemo(() => {
-    const ids = new Set(plan?.selected.map((row) => row.location_id))
-    return locations.filter((location) => ids.has(location.id))
-  }, [locations, plan])
+  const interventionByLocation = useMemo(() => new Map(plan?.selected.map((row) => [row.location_id, row.type])), [plan])
+  const plannedLocations = useMemo(() => locations.filter((location) => interventionByLocation.has(location.id)), [locations, interventionByLocation])
+  const visibleMarkerStyles = [...new Set(plannedLocations.map(({ id }) => (
+    interventionMarkers.get(interventionByLocation.get(id) ?? "") ?? defaultInterventionMarker
+  )))]
   const activeTree = treeSelection?.plan === plan
     ? plannedLocations.find((location) => location.id === treeSelection.id) ?? null
     : null
@@ -312,15 +345,17 @@ export default function CityMap({ heat, trees, context, air, locations, selected
     const markers = L.layerGroup().addTo(map)
     const connectors = L.layerGroup().addTo(map)
     const byId = new Map<string, L.Marker>()
-    const icon = L.divIcon({
-      html: treeGlyph,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
-      className: styles.treePin,
-    })
     for (const location of plannedLocations) {
       const priority = location.priority_band === "high"
-      const label = `Πρόταση για ${location.name}`
+      const type = interventionByLocation.get(location.id) ?? ""
+      const appearance = interventionMarkers.get(type) ?? defaultInterventionMarker
+      const label = `Πρόταση για ${location.name} · ${appearance.label}`
+      const icon = L.divIcon({
+        html: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${appearance.path}" /></svg>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+        className: styles.treePin,
+      })
       const marker = L.marker([location.latitude, location.longitude], {
         title: label,
         icon,
@@ -331,6 +366,8 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       element?.setAttribute("aria-label", label)
       element?.setAttribute("aria-expanded", "false")
       element?.setAttribute("data-tree-location", location.id)
+      element?.setAttribute("data-intervention-type", type)
+      element?.style.setProperty("--intervention-color", appearance.color)
       marker.on("click", () => setTreeSelection((previous) => (
         previous?.plan === plan && previous.id === location.id ? null : { id: location.id, plan }
       )))
@@ -360,8 +397,9 @@ export default function CityMap({ heat, trees, context, air, locations, selected
         const anchor = position.equals(origin) ? actual : map.unproject(position)
         byId.get(location.id)?.setLatLng(anchor)
         if (!anchor.equals(actual)) {
+          const appearance = interventionMarkers.get(interventionByLocation.get(location.id) ?? "") ?? defaultInterventionMarker
           L.polyline([actual, anchor], {
-            color: "#176544", weight: 1.5, opacity: 0.78, interactive: false,
+            color: appearance.color, weight: 1.5, opacity: 0.78, interactive: false,
           }).addTo(connectors)
         }
       }
@@ -375,7 +413,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       markers.remove()
       treeMarkers.current = new Map()
     }
-  }, [plan, plannedLocations])
+  }, [interventionByLocation, plan, plannedLocations])
 
   useEffect(() => {
     for (const [id, marker] of treeMarkers.current) {
@@ -515,7 +553,7 @@ export default function CityMap({ heat, trees, context, air, locations, selected
       {(!tilesAvailable || !heat) && (
         <div className="tile-status">{!heat ? "Φόρτωση ή απουσία θερμικού επιπέδου" : "Το βασικό υπόβαθρο δεν είναι διαθέσιμο"}</div>
       )}
-      <div className={`map-legend${showCanopy ? ` ${styles.combinedLegend}` : ""}`}>
+      <div className={`map-legend${showCanopy || visibleMarkerStyles.length > 0 ? ` ${styles.combinedLegend}` : ""}`}>
         {showHeat && (
           <div>
             <strong>Θερμοκρασία επιφάνειας (°C)</strong>
@@ -544,8 +582,21 @@ export default function CityMap({ heat, trees, context, air, locations, selected
           {showPlantings && <span><i className="legend-swatch legend-swatch--planting" /> Καταγραφές φύτευσης</span>}
           {showParks && <span><i className="legend-swatch legend-swatch--park" /> Πάρκο τσέπης</span>}
           {showSchools && <span><i className="legend-swatch legend-swatch--schools" /> Δημόσια σχολεία</span>}
-          {plannedLocations.length > 0 && <span><TreeDeciduous className={styles.legendTree} size={14} aria-hidden="true" /> Θέση στο πλάνο</span>}
         </div>
+        {visibleMarkerStyles.length > 0 && (
+          <div className={`legend-features ${styles.planLegend}`} aria-label="Σύμβολα παρεμβάσεων">
+            {visibleMarkerStyles.map(({ label, color, path }) => (
+              <span key={label}>
+                <i className={styles.legendPin} style={{ backgroundColor: color }} aria-hidden="true">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d={path} />
+                  </svg>
+                </i>
+                {label}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       <div className="map-scale" aria-hidden="true"><span>{scale.label}</span><i style={{ width: scale.width }} /></div>
     </div>

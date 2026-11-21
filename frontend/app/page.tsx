@@ -261,7 +261,7 @@ export default function AthensShade() {
         )}
         <AiBrief plan={plan} isStale={isStale} />
         <CoolingEstimates plan={plan} isStale={isStale} locations={locationById} />
-        <InvestmentPanel plan={plan} isStale={isStale} comparison={currentComparison} />
+        <InvestmentPanel plan={plan} isStale={isStale} locations={locationById} />
         <MicroclimateMonitor />
       </main>
     </>

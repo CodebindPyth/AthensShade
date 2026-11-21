@@ -30,6 +30,7 @@ from .models import (
 )
 from .optimizer import OptimizationError, optimize
 from .plan_card import LocalPlanCardEditor, PlanCard
+from .savings import SavingsScenario, calculate_savings
 from .semantic import ModelUnavailable, SemanticResult, keyword_search, semantic_search
 
 DEFAULT_DATASET_PATH = Path(__file__).resolve().parents[2] / "data" / "processed" / "athens.json"
@@ -150,6 +151,12 @@ def create_app(dataset_path: Path | None = None) -> FastAPI:
     @api.post("/optimize", tags=["Planning"])
     def plan(request: OptimizeRequest, analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)]) -> Plan:
         return get_plan(analysis, request)
+
+    @api.post("/savings", tags=["Planning"])
+    def annual_savings(
+        request: OptimizeRequest, analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)],
+    ) -> SavingsScenario:
+        return calculate_savings(get_plan(analysis, request).selected)
 
     @api.post("/locations/{location_id}/plan-card", tags=["Planning"])
     def plan_card(

@@ -12,16 +12,19 @@ from pydantic import BaseModel, ConfigDict
 
 from .investment import FinancialAssumptions, appraise_investment
 from .models import ExplainedIntervention, InterventionType, RankedLocation
+from .savings import SavingsScenario, calculate_savings
 
 LOGGER = logging.getLogger(__name__)
 Option = tuple[str, str, str]
 
-_ACTION_GUIDANCE: dict[InterventionType, tuple[Option, Option]] = {
+_ACTION_GUIDANCE: dict[InterventionType, tuple[Option, ...]] = {
     "tree_planting": (
         ("rooting", "Verify rooting space and overhead and underground utility clearance",
          "Έλεγξε τον χώρο ριζοβολίας και τα υπόγεια δίκτυα πριν ορίσεις τις θέσεις φύτευσης."),
         ("watering", "Verify irrigation and care across hot summers",
          "Προϋπολόγισε πότισμα και φροντίδα μέχρι να εδραιωθούν τα δέντρα και να αναπτύξουν κόμη."),
+        ("tree_savings", "Check whether mature trees replace an existing spending item before counting savings",
+         "Όταν ωριμάσουν τα δέντρα, έλεγξε αν η σκιά τους καταργεί κάποια καταγεγραμμένη δημοτική δαπάνη."),
     ),
     "green_roof": (
         ("structure", "Obtain roof structural load and waterproofing assessments",
@@ -34,18 +37,24 @@ _ACTION_GUIDANCE: dict[InterventionType, tuple[Option, Option]] = {
          "Έλεγξε τη διέλευση πεζών και τη σκιά στις ώρες αιχμής πριν οριστεί η θέση του σκιάστρου."),
         ("maintenance", "Obtain maintenance quotes for the installed structure",
          "Ζήτησε κόστος συντήρησης και αντικατάστασης του σκιάστρου για τον οικονομικό υπολογισμό."),
+        ("shade_rental", "Compare existing rental invoices with the scope of the permanent shelter",
+         "Σύγκρινε τα τιμολόγια προσωρινής σκίασης με όσα καλύπτει το νέο σκίαστρο στην ίδια θέση."),
     ),
     "shaded_bench": (
         ("access", "Check step-free access and space beside the bench",
          "Έλεγξε την προσβάσιμη όδευση και τον ελεύθερο χώρο δίπλα στο κάθισμα."),
         ("seat_shade", "Verify shade falls onto the entire seating area during the hottest hours",
          "Επαλήθευσε ότι το σκίαστρο καλύπτει τα καθίσματα στις θερμότερες ώρες."),
+        ("bench_setup", "Identify existing temporary seating or shade setup spending the bench would replace",
+         "Έλεγξε αν το παγκάκι αντικαθιστά έξοδα που ήδη πληρώνει ο Δήμος για προσωρινά καθίσματα και σκίαση."),
     ),
     "greenery": (
         ("water", "Verify drainage and irrigation supply on site",
          "Επιβεβαίωσε την αποστράγγιση και τη δυνατότητα άρδευσης πριν οριστικοποιηθεί η φύτευση."),
         ("species", "Choose plants that match water availability and the local heat",
          "Επίλεξε είδη που ταιριάζουν στην τοπική ζέστη και στη διαθέσιμη άρδευση."),
+        ("greenery_savings", "Verify whether the intervention replaces any existing maintenance spending",
+         "Σύγκρινε τη νέα συντήρηση με τις σημερινές δαπάνες πριν υπολογίσεις εξοικονόμηση."),
     ),
 }
 
@@ -66,6 +75,7 @@ class PlanCard(BaseModel):
     simple_payback_year: int | None
     discounted_payback_year: int | None
     required_annual_savings_eur: float | None
+    savings: SavingsScenario
 
 
 class _GuidanceSelection(BaseModel):
@@ -95,7 +105,7 @@ class LocalPlanCardEditor:
 
     def build(self, site: RankedLocation, items: list[ExplainedIntervention], strategy: str) -> PlanCard:
         capital = sum((Decimal(str(item.cost_eur)) for item in items), start=Decimal(0))
-        # The roof example illustrates an energy bill. Outdoor shade has no assumed cash inflow.
+        # Keep legacy appraisal fields for existing clients. The dashboard uses the new yearly scenario.
         savings = Decimal("2000.00") if all(item.type == "green_roof" for item in items) else Decimal(0)
         assumptions = FinancialAssumptions(
             annual_savings_eur=savings,
@@ -111,8 +121,8 @@ class LocalPlanCardEditor:
             ("inspection", "Commission an on-site feasibility inspection first",
              "Ξεκίνα με αυτοψία για να επιβεβαιώσεις ότι η προτεινόμενη παρέμβαση χωρά και είναι εφαρμόσιμη.")
             if requires_inspection else
-            ("budget", "Substitute real operating figures before reporting a payback",
-             "Χρησιμοποίησε πραγματικές προσφορές, έξοδα συντήρησης και ετήσιες εξοικονομήσεις για την απόσβεση.")
+            ("budget", "Substitute real operating figures before reporting financial savings",
+             "Χρησιμοποίησε πραγματικά τιμολόγια και έξοδα συντήρησης για να εκτιμήσεις την ετήσια εξοικονόμηση.")
         )
         options = {
             key: (label, text)
@@ -156,12 +166,14 @@ class LocalPlanCardEditor:
             simple_payback_year=appraisal.simple_payback_year,
             discounted_payback_year=appraisal.discounted_payback_year,
             required_annual_savings_eur=appraisal.required_annual_savings_eur,
+            savings=calculate_savings(items),
         )
 
     def _select(self, scenario: str, options: tuple[tuple[str, str], ...]) -> str:
         system = (
-            "Select the best next field verification or financial evidence step for the supplied "
-            "heat adaptation site. Choose only one supplied focus ID. Return a JSON object with "
+            "Select the best next verification step for the supplied heat adaptation site. When relevant, "
+            "prefer a step that validates potential reductions in municipal spending. Choose only one supplied "
+            "focus ID. Return a JSON object with "
             "one 'focus' field."
         )
         choices = dict(options)

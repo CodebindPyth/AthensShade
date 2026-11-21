@@ -110,33 +110,26 @@ export type EvidenceSearchResponse = {
   method: "semantic" | "keywords"
   results: { title: string; description: string; url: string }[]
 }
-export type FinancialAssumptions = {
-  annual_savings_eur: number
+export type SavingsAmounts = {
+  gross_annual_eur: number
   annual_maintenance_eur: number
-  horizon_years: number
-  discount_rate_pct: number
-  savings_delay_years: number
-  grant_eur: number
-  capital_override_eur?: number | null
+  net_annual_eur: number
 }
-export type FinancialAppraisal = {
-  capital_cost_eur: number
-  net_initial_cost_eur: number
-  npv_eur: number
-  cumulative_net_eur: number
-  simple_payback_year: number | null
-  discounted_payback_year: number | null
-  required_annual_savings_eur: number | null
-  sensitivity: { change_pct: number; annual_savings_eur: number; npv_eur: number }[]
+export type SavingsItem = SavingsAmounts & {
+  intervention_id: string
+  location_id: string
+  type: string
+  assumptions: string[]
+}
+export type SavingsEstimate = SavingsAmounts & {
+  source: "hypothetical_scenario"
+  items: SavingsItem[]
 }
 export type SiteCardResponse = {
   source: "local_model" | "verified_template"
   model: string | null
   explanation: string
-  assumptions: Pick<FinancialAssumptions, "annual_savings_eur" | "annual_maintenance_eur" | "horizon_years" | "discount_rate_pct" | "savings_delay_years"> | null
-  simple_payback_year: number | null
-  discounted_payback_year: number | null
-  required_annual_savings_eur: number | null
+  savings: SavingsEstimate
 }
 
 export type LayerName = "heat" | "trees" | "context"
@@ -155,8 +148,8 @@ export const api = {
   searchEvidence: (query: string, signal?: AbortSignal) =>
     post<EvidenceSearchResponse>("/evidence-search", { query }, signal),
   compare: (baseline: Scenario, proposed: Scenario) => post<Comparison>("/scenarios/compare", { baseline, proposed }),
-  appraise: (scenario: Scenario, assumptions: FinancialAssumptions, signal?: AbortSignal, interventionType?: string) =>
-    post<FinancialAppraisal>("/investment-appraisal", { scenario, assumptions, intervention_type: interventionType }, signal),
+  savings: (scenario: Scenario, signal?: AbortSignal) =>
+    post<SavingsEstimate>("/savings", scenario, signal),
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {

@@ -7,7 +7,7 @@
   place-items: center;
   border: 2px solid #fff;
   border-radius: 50%;
-  background: #176544;
+  background: var(--intervention-color, #176544);
   color: #fff;
   cursor: pointer;
   box-shadow: 0 2px 5px #163c3399;
@@ -15,7 +15,7 @@
 
 .mapCanvas .treePin:hover,
 .mapCanvas .treePin[aria-expanded="true"] {
-  background: #104c35;
+  background: color-mix(in srgb, var(--intervention-color, #176544) 82%, black);
   box-shadow: 0 0 0 3px #e9cd7d, 0 2px 7px #163c3377;
 }
 
@@ -24,9 +24,21 @@
   outline-offset: 2px;
 }
 
-.legendTree {
-  color: #176544;
+.legendPin {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
   flex: 0 0 auto;
+}
+
+.planLegend {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 5px 9px;
+  max-width: 250px;
 }
 
 .legendFeatures:empty {

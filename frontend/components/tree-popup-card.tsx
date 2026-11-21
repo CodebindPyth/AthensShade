@@ -47,7 +47,7 @@ export function TreePopupCard({ location, plan }: TreePopupCardProps) {
           <li key={item.id}>
             <div className={styles.actionTitle}>
               <strong>{interventionLabel(item.type)}</strong>
-              <strong>{euros(item.cost_eur)}</strong>
+              <strong title="Αρχικό κόστος παρέμβασης">{euros(item.cost_eur)}</strong>
             </div>
             <p className={styles.context}>
               {[interventionQuantity(item), feasibilityLabel(item.feasibility)].filter(Boolean).join(" · ")}
@@ -91,7 +91,8 @@ function interventionQuantity(item: Intervention) {
 }
 
 function SiteAssessment({ brief }: { brief: SiteCardResponse }) {
-  const assumptions = brief.assumptions
+  const { savings } = brief
+  const assumptions = savings?.items.flatMap((item) => item.assumptions) ?? []
   return (
     <>
       <p className={styles.origin}>
@@ -99,30 +100,23 @@ function SiteAssessment({ brief }: { brief: SiteCardResponse }) {
       </p>
       <p className={styles.guidance}>{brief.explanation}</p>
       <div className={styles.finance}>
-        <p className={styles.origin}>Ενδεικτική απόσβεση · Demo</p>
-        {assumptions ? (
+        <p className={styles.origin}>Ετήσια οικονομική επίδραση · Demo</p>
+        {savings ? (
           <>
-            <p className={styles.payback}>
-              {assumptions.annual_savings_eur <= 0
-                ? "Η θέση χρειάζεται μετρήσιμη εξοικονόμηση για να εκτιμηθεί απόσβεση."
-                : brief.simple_payback_year === null
-                  ? `Δεν αποσβένεται σε ${numeric(assumptions.horizon_years)} έτη`
-                  : `Απλή απόσβεση σε ${numeric(brief.simple_payback_year)} έτη`}
+            <p className={styles.savingsFigure}>
+              {savings.net_annual_eur >= 0
+                ? `${euros(savings.net_annual_eur)}/έτος καθαρή εξοικονόμηση`
+                : `${euros(-savings.net_annual_eur)}/έτος καθαρό κόστος`}
             </p>
-            {brief.required_annual_savings_eur !== null && (
-              <p className={styles.context}>Όριο οικονομικής κάλυψης {euros(brief.required_annual_savings_eur)}/έτος σε {numeric(assumptions.horizon_years)} έτη.</p>
-            )}
+            {assumptions[0] && <p className={styles.context}>{assumptions[0]}</p>}
             <details className={styles.details}>
-              <summary>Υποθετικές παραδοχές</summary>
-              <p>{euros(assumptions.annual_savings_eur)} εξοικονόμηση και {euros(assumptions.annual_maintenance_eur)} συντήρηση ανά έτος.</p>
-              <p>Ορίζοντας {numeric(assumptions.horizon_years)} έτη · επιτόκιο {numeric(assumptions.discount_rate_pct)}%{assumptions.savings_delay_years > 0 ? ` · έναρξη μετά από ${numeric(assumptions.savings_delay_years)} έτη` : ""}.</p>
-              <p>Προεξοφλημένη απόσβεση {brief.discounted_payback_year === null
-                ? `πέρα από τα ${numeric(assumptions.horizon_years)} έτη`
-                : `σε ${numeric(brief.discounted_payback_year)} έτη`}.</p>
+              <summary>Παραδοχές υποθετικού σεναρίου</summary>
+              <p>{euros(savings.gross_annual_eur)} μείωση δαπανών · {euros(savings.annual_maintenance_eur)} συντήρηση ανά έτος.</p>
+              {Array.from(new Set(assumptions.slice(1))).map((assumption) => <p key={assumption}>{assumption}</p>)}
             </details>
           </>
         ) : (
-          <p className={styles.context}>Δεν υπάρχουν διαθέσιμες παραδοχές για απόσβεση.</p>
+          <p className={styles.context}>Δεν υπάρχει διαθέσιμη εκτίμηση εξοικονόμησης.</p>
         )}
       </div>
     </>

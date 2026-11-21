@@ -19,54 +19,19 @@
   line-height: 1.22;
 }
 
-.cost {
-  display: flex;
-  align-items: baseline;
-  gap: 5px 10px;
-  flex-wrap: wrap;
-  font-size: 13px;
-}
-
-.cost strong { color: var(--ink); font-size: 17px; }
 .empty { margin-top: 8px; font-size: 14px; }
 
-.sectionBody, .impactRows {
+.heading > svg { color: var(--blue); }
+.impactRows {
+  list-style: none;
   margin-top: 15px;
+  padding-left: 0;
   border-top: 1px solid var(--line);
 }
 
-.heading > svg { color: var(--blue); }
-.finance { max-width: 850px; padding-top: 15px; }
-.impactRows { list-style: none; padding-left: 0; }
-.funding {
-  margin: 11px 0 15px;
-  padding: 10px 12px;
-  border: 1px solid #d5e5dc;
-  border-radius: 7px;
-  background: #f3f8f5;
-  color: var(--body);
-  font-size: 13px;
-}
-.funding > strong, .funding p strong { color: var(--green); }
-.funding p { margin: 4px 0 0; }
-.fundingDetails { margin-top: 6px; }
-.fundingDetails summary { color: var(--blue-deep); cursor: pointer; }
-.fundingDetails ul { margin: 6px 0 0; padding-left: 18px; }
-.fundingDetails li + li { margin-top: 4px; }
-
-.subheading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 9px;
-  color: var(--ink);
-  font-size: 16px;
-}
-
-.subheading svg { flex: 0 0 auto; color: var(--blue); }
 .impactRow { padding: 11px 0 13px; }
 .impactRow + .impactRow { border-top: 1px solid var(--line); }
-.impactRow h4, .results h4 { margin: 0; color: var(--ink); font-size: 14px; }
+.impactRow h4 { margin: 0; color: var(--ink); font-size: 14px; }
 .note { color: var(--muted); font-size: 13px; }
 .impactRow .note { margin-top: 3px; }
 
@@ -85,83 +50,45 @@
 .impactData > div { min-width: 0; }
 .impactData dt { color: var(--muted); }
 .impactData dd { margin: 0; color: var(--ink); font-weight: 600; }
-.impactData dd, .cost strong, .forecast strong, .resultMetrics dd, .sensitivity { font-variant-numeric: tabular-nums; }
+.impactData dd, .forecast strong { font-variant-numeric: tabular-nums; }
 .evidence { margin: 7px 0 0; font-size: 12px; }
 .evidence a { white-space: nowrap; }
 .evidence a, .measurementLink { color: var(--blue-deep); text-underline-offset: 2px; }
 .evidence a svg { vertical-align: -1px; }
 .measurementLink { display: inline-block; margin: 5px 0 0; font-size: 13px; }
 
-.comparison {
-  margin: 6px 0 10px;
-  padding: 7px 10px;
-  border-left: 2px solid var(--blue);
-  background: var(--blue-soft);
-  font-size: 13px;
-}
-
-.example {
-  margin: 6px 0 4px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--blue-deep);
-  font-size: 13px;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.scope { margin-bottom: 10px; }
-.scope p { margin-top: 4px; }
-
-.form { margin-top: 12px; }
-.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 11px; }
-.fields label, .scope label { display: grid; align-content: end; gap: 4px; min-width: 0; color: var(--body); font-size: 13px; }
-
-.fields input, .scope select {
-  width: 100%;
-  min-width: 0;
-  min-height: 42px;
-  padding: 6px 9px;
-  border: 1px solid #b7c1d1;
-  border-radius: 5px;
-  color: var(--ink);
-  background: var(--paper);
-  font-size: 16px;
-}
-
-.submit { width: 100%; margin-top: 10px; }
-.costHelp { margin-top: 6px; color: var(--muted); font-size: 12px; }
-.error { margin-top: 9px; color: #a52a35; font-size: 13px; }
-
-.results { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
-.resultMetrics { margin: 7px 0; }
-
-.resultMetrics > div {
+.savingsBody { margin-top: 12px; }
+.scenario { margin: 0 0 9px; color: #276047; font-size: 13px; font-weight: 700; }
+.savingsMetrics {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
-  align-items: baseline;
-  gap: 4px 10px;
-  padding: 5px 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 9px;
 }
-
-.resultMetrics > div + div { border-top: 1px solid var(--line); }
-.resultMetrics dt { font-size: 13px; }
-.resultMetrics dd { margin: 0; color: var(--ink); font-size: 14px; font-weight: 650; text-align: right; }
-.resultMetrics .negative { color: #a52a35; }
-.threshold { margin: 10px 0 7px; padding: 8px 10px; border-radius: 5px; background: var(--blue-soft); font-size: 13px; }
-
-.sensitivity { width: 100%; border-collapse: collapse; margin-top: 11px; font-size: 12px; }
-.sensitivity caption { text-align: left; color: var(--ink); font-size: 13px; font-weight: 700; }
-.sensitivity th, .sensitivity td { padding: 5px 4px; text-align: right; border-bottom: 1px solid var(--line); }
-.sensitivity th:first-child { padding-left: 0; text-align: left; }
-.sensitivity :is(th, td):last-child { padding-right: 0; }
-.sensitivity tbody th { color: var(--body); font-weight: 600; }
+.savingsMetrics > div { padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; }
+.savingsMetrics > div[data-net="saving"] { border-color: #d5e5dc; background: #f3f8f5; }
+.savingsMetrics > div[data-net="cost"] { border-color: #ead1d3; background: #fff6f6; }
+.savingsMetrics dt { font-size: 12px; }
+.savingsMetrics dd { margin: 3px 0 0; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.savingsBody [data-net="saving"] { color: #276047; }
+.savingsBody [data-net="cost"] { color: #a52a35; }
+.assumptions { margin-top: 11px; font-size: 13px; }
+.assumptions > summary { cursor: pointer; color: var(--blue-deep); font-weight: 650; }
+.assumptions > ul { margin: 7px 0 0; padding: 0; list-style: none; }
+.assumptions > ul > li { padding: 8px 0; border-top: 1px solid var(--line); }
+.itemHeading { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 3px 12px; }
+.itemHeading strong { color: var(--ink); }
+.itemHeading span { font-weight: 650; }
+.itemAssumptions { margin: 5px 0 0; padding-left: 20px; }
+.itemAssumptions li + li { margin-top: 3px; }
+.error { margin-top: 9px; color: #a52a35; font-size: 13px; }
+.retry { padding: 0; border: 0; background: transparent; color: var(--blue-deep); font: inherit; text-decoration: underline; cursor: pointer; }
 
 @media (max-width: 760px) {
   .panel { padding: 16px; }
 }
 
-@media (max-width: 350px) {
-  .fields { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 480px) {
+  .savingsMetrics { grid-template-columns: 1fr; }
+  .savingsMetrics > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 3px 9px; }
 }
