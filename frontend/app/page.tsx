@@ -38,7 +38,7 @@ export default function AthensShade() {
   const [budget, setBudget] = useState(formatBudgetInput(String(defaultBudget)))
   const [baseline, setBaseline] = useState("50.000")
   const [includeInspection, setIncludeInspection] = useState(true)
-  const [strategy, setStrategy] = useState<Strategy>("tree_priority")
+  const [strategy, setStrategy] = useState<Strategy>("balanced")
   const [plan, setPlan] = useState<Plan | null>(null)
   const [impactPlan, setImpactPlan] = useState<Plan | null>(null)
   const [busy, setBusy] = useState(false)
