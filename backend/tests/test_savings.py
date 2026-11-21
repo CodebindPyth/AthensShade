@@ -9,7 +9,7 @@ from app.savings import calculate_savings
 def demo_scenario(budget: int) -> dict:
     return {
         "budget_eur": budget,
-        "strategy": "shade_and_rest",
+        "strategy": "tree_priority",
         "include_inspection": True,
         "priority_only": True,
     }
@@ -18,15 +18,15 @@ def demo_scenario(budget: int) -> dict:
 def test_savings_scale_with_selected_interventions() -> None:
     stat = DEFAULT_DATASET_PATH.stat()
     analysis = load_dataset(DEFAULT_DATASET_PATH, stat.st_mtime_ns, stat.st_size)
-    large_plan = optimize(analysis, OptimizeRequest(**demo_scenario(100_000)))
+    large_plan = optimize(analysis, OptimizeRequest(**demo_scenario(150_000)))
     small_plan = optimize(analysis, OptimizeRequest(**demo_scenario(50_000)))
     larger = calculate_savings(large_plan.selected)
     smaller = calculate_savings(small_plan.selected)
 
     assert larger.source == "hypothetical_scenario"
-    assert larger.gross_annual_eur == 11_900
-    assert larger.annual_maintenance_eur == 1_921.03
-    assert larger.net_annual_eur == 9_978.97
+    assert larger.gross_annual_eur == 7_100
+    assert larger.annual_maintenance_eur == 2_809.65
+    assert larger.net_annual_eur == 4_290.35
     assert larger.net_annual_eur > smaller.net_annual_eur
     assert [row.intervention_id for row in larger.items] == [row.id for row in large_plan.selected]
     assert all(len(row.assumptions) == 2 for row in larger.items)
@@ -37,8 +37,6 @@ def test_savings_scale_with_selected_interventions() -> None:
     assert "1.200 €" in tree.assumptions[0]
     assert "ώριμη κόμη" in tree.assumptions[0]
     assert tree.benefit and "ψύξης" in tree.benefit
-    bench = next(row for row in larger.items if row.type == "shaded_bench")
-    assert bench.benefit and "υπεριώδη" in bench.benefit
     shelter = next(row for row in larger.items if row.type == "shade_structure")
     assert shelter.benefit and "εξοπλισμό" in shelter.benefit
 
@@ -46,7 +44,7 @@ def test_savings_scale_with_selected_interventions() -> None:
 def test_savings_uses_same_site_figures_on_map_card(monkeypatch) -> None:
     monkeypatch.setenv("ATHENSSHADE_LOCAL_ENGINE", "disabled")
     with TestClient(create_app(DEFAULT_DATASET_PATH)) as client:
-        scenario = demo_scenario(100_000)
+        scenario = demo_scenario(150_000)
         plan_response = client.post("/api/savings", json=scenario)
         assert plan_response.status_code == 200
         plan_savings = plan_response.json()

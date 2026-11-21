@@ -1,4 +1,29 @@
-import type { FeatureCollection } from "geojson"
+import type { FeatureCollection, MultiPolygon, Polygon } from "geojson"
+
+export type MunicipalAsset = {
+  kind: "school" | "building"
+  source_url: string
+  source_label: string
+  notes: string[]
+  temperature_scope: "atlas_cell" | "existing_100m_estimate"
+  heritage?: boolean
+}
+
+export type Siting = {
+  status: "candidate" | "road_conflict" | "insufficient_space" | "unverified"
+  message: string
+  evidence: {
+    latitude: number
+    longitude: number
+    mapped_space: string
+    available_area_m2: number
+    road_distance_m: number
+    source_url: string
+    geometry?: Polygon | MultiPolygon
+    constraint_note?: string | null
+    constraint_source_url?: string | null
+  } | null
+}
 
 export type Location = {
   id: string
@@ -21,6 +46,7 @@ export type Location = {
   population_density_per_km2?: number | null
   population_source_id?: string | null
   population_grid_m?: number | null
+  municipal_asset?: MunicipalAsset | null
 }
 
 export type Intervention = {
@@ -41,6 +67,7 @@ export type Intervention = {
     assumption: string
   } | null
   greened_roof_area_m2?: number | null
+  siting?: Siting | null
 }
 
 export type Dataset = {
@@ -62,7 +89,7 @@ export type AirReading = {
 }
 export type AirObservations = { readings: AirReading[]; source_url: string; registry_url: string }
 export type Analysis = { location: Location; interventions: Intervention[]; explanation: string }
-export type Strategy = "balanced" | "immediate_shade" | "shade_and_rest"
+export type Strategy = "balanced" | "immediate_shade" | "tree_priority"
 export type Scenario = { budget_eur: number; include_inspection: boolean; strategy: Strategy; priority_only?: boolean }
 export type ShadeRange = { min_m2: number; max_m2: number }
 export type ShadeImpact = {
@@ -132,6 +159,11 @@ export type SiteCardResponse = {
   explanation: string
   savings: SavingsEstimate
 }
+export type MunicipalAdvice = {
+  source: "local_model" | "verified_template"
+  model: string | null
+  recommendation: string
+}
 
 export type LayerName = "heat" | "trees" | "context"
 export type Layers = Record<LayerName, FeatureCollection>
@@ -142,6 +174,8 @@ export const api = {
   airObservations: (signal?: AbortSignal) => request<AirObservations>("/air-observations", { signal }),
   layer: (layer: LayerName, signal?: AbortSignal) => request<FeatureCollection>(`/layers/${layer}`, { signal }),
   analysis: (id: string, signal?: AbortSignal) => request<Analysis>(`/locations/${encodeURIComponent(id)}/analysis`, { signal }),
+  municipalAdvice: (id: string, signal?: AbortSignal) =>
+    request<MunicipalAdvice>(`/locations/${encodeURIComponent(id)}/municipal-advice`, { signal }),
   optimize: (scenario: Scenario, signal?: AbortSignal) => post<Plan>("/optimize", scenario, signal),
   siteCard: (id: string, scenario: Scenario, signal?: AbortSignal) =>
     post<SiteCardResponse>(`/locations/${encodeURIComponent(id)}/plan-card`, scenario, signal),

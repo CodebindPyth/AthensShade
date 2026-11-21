@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Sparkles } from "lucide-react"
 import { api } from "../lib/api"
-import type { Intervention, Location, Plan, SiteCardResponse } from "../lib/api"
+import type { Intervention, Location, MunicipalAdvice, Plan, SiteCardResponse, Siting } from "../lib/api"
 import { euros, feasibilityLabel, interventionLabel, numeric, shadeArea, shadeLabel, temperature } from "../lib/format"
 import styles from "./tree-popup-card.module.css"
 
@@ -61,6 +61,7 @@ export function TreePopupCard({ location, plan }: TreePopupCardProps) {
               </p>
             )}
             {benefit && <p className={styles.benefit}>{benefit}</p>}
+            {item.siting && <SitingDetails siting={item.siting} />}
           </li>
           )
         })}
@@ -70,6 +71,7 @@ export function TreePopupCard({ location, plan }: TreePopupCardProps) {
           <p className={styles.context}>{unavailable ? "Η εκτίμηση της θέσης δεν είναι διαθέσιμη αυτή τη στιγμή." : "Υπολογίζεται η εκτίμηση για αυτή τη θέση…"}</p>
         )}
       </div>
+      {location.municipal_asset && <MunicipalOptions location={location} />}
     </section>
   )
 }
@@ -87,11 +89,67 @@ function interventionQuantity(item: Intervention) {
     const count = item.shade_impact.unit_count
     return `${numeric(count)} ${count === 1 ? "σκίαστρο" : "σκίαστρα"}`
   }
-  if (item.type === "shaded_bench" && item.shade_impact) {
-    const count = item.shade_impact.unit_count
-    return `${numeric(count)} ${count === 1 ? "παγκάκι με σκίαστρο" : "παγκάκια με σκίαστρο"}`
-  }
   return null
+}
+
+function SitingDetails({ siting }: { siting: Siting }) {
+  const evidence = siting.evidence
+  return (
+    <details className={styles.siting}>
+      <summary>Χαρτογραφικός προέλεγχος θέσης</summary>
+      <p>{siting.message}</p>
+      {evidence && (
+        <>
+          <p>{numeric(evidence.available_area_m2)} m² χαρτογραφημένης επιφάνειας μετά τις ζώνες αποκλεισμού · {numeric(evidence.road_distance_m)} m από καταγεγραμμένο άξονα δρόμου.</p>
+          <a href={evidence.source_url} target="_blank" rel="noreferrer">Γεωμετρία OpenStreetMap</a>
+          {evidence.constraint_note && <p>{evidence.constraint_note}</p>}
+          {evidence.constraint_source_url && (
+            <a href={evidence.constraint_source_url} target="_blank" rel="noreferrer">Τεκμηρίωση περιορισμού</a>
+          )}
+        </>
+      )}
+      <p>Η αυτοψία ελέγχει τη διαθέσιμη ελεύθερη όδευση, τα δίκτυα και τη στήριξη.</p>
+    </details>
+  )
+}
+
+export function MunicipalPopupCard({ location }: { location: Location }) {
+  return (
+    <section className={styles.card} aria-label={`Δημοτικό κτίριο · ${location.name}`}>
+      <header className={styles.header}>
+        <span className={styles.budget}>Δημοτικά κτίρια · θερμή ζώνη</span>
+        <h3>{location.name}</h3>
+        {location.heat_c !== null && <p className={styles.context}>{temperature(location.heat_c)} ιστορική θερμοκρασία επιφάνειας</p>}
+      </header>
+      <MunicipalOptions location={location} />
+    </section>
+  )
+}
+
+function MunicipalOptions({ location }: { location: Location }) {
+  const [advice, setAdvice] = useState<MunicipalAdvice | null>(null)
+  useEffect(() => {
+    const controller = new AbortController()
+    api.municipalAdvice(location.id, controller.signal)
+      .then((result) => { if (!controller.signal.aborted) setAdvice(result) })
+      .catch(() => {})
+    return () => controller.abort()
+  }, [location.id])
+
+  const asset = location.municipal_asset
+  if (!asset) return null
+  const first = advice?.recommendation ?? asset.notes[0]
+  return (
+    <section className={styles.municipal} aria-label="Λύσεις προς μελέτη για το κτίριο">
+      <p className={styles.origin}>{advice?.source === "local_model" ? <><Sparkles size={13} aria-hidden="true" /> Πρόταση ελέγχου από τοπικό AI</> : "Λύσεις προς μελέτη"}</p>
+      <p>{first}</p>
+      <details className={styles.details}>
+        <summary>Άλλες επιλογές και πηγή</summary>
+        <ul>{asset.notes.filter((note) => note !== first).map((note) => <li key={note}>{note}</li>)}</ul>
+        <a href={asset.source_url} target="_blank" rel="noreferrer">{asset.source_label}</a>
+      </details>
+    </section>
+  )
 }
 
 function SiteAssessment({ brief }: { brief: SiteCardResponse }) {

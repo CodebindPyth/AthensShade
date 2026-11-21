@@ -137,6 +137,9 @@
   color: #405269;
 }
 
+.mapCanvas .impactLabel div { display: grid; gap: 2px; text-align: center; }
+.mapCanvas .impactLabel span + span { color: #22546a; font-size: 10px; }
+
 .mapCanvas .impactLabel:hover,
 .mapCanvas .impactLabel:focus-visible {
   outline: 2px solid #17576d;
@@ -174,4 +177,5 @@
 }
 
 .impactDetail p { margin: 3px 0; }
+.impactDetail .impactArea { font-weight: 700; }
 .impactDetail a { color: #07536e; text-underline-offset: 2px; }

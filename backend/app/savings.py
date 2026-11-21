@@ -30,7 +30,6 @@ class SavingsScenario(BaseModel):
 ENERGY_KWH_PER_ROOF_M2 = Decimal(25)
 ENERGY_EUR_PER_KWH = Decimal("0.20")
 SEASONAL_RENTAL_PER_SHELTER_EUR = Decimal(4800)
-SEASONAL_SETUP_PER_BENCH_EUR = Decimal(500)
 MAINTENANCE_FRACTION = Decimal("0.02")
 
 _LOCAL_BENEFITS: dict[InterventionType, str] = {
@@ -41,10 +40,6 @@ _LOCAL_BENEFITS: dict[InterventionType, str] = {
     "shade_structure": (
         "Το μόνιμο σκίαστρο περιορίζει την άμεση έκθεση στον ήλιο για τους πεζούς και τον "
         "εξοπλισμό από κάτω. Αν καλύπτει την ίδια ανάγκη, μπορεί να αντικαταστήσει την προσωρινή σκίαση."
-    ),
-    "shaded_bench": (
-        "Η μικρότερη έκθεση στην υπεριώδη ακτινοβολία μπορεί να επιβραδύνει το ξεθώριασμα "
-        "και τη φθορά του φινιρίσματος στο παγκάκι."
     ),
     "green_roof": (
         "Το φυτεμένο δώμα μπορεί να μειώσει τη ζέστη που περνά από την οροφή "
@@ -69,7 +64,7 @@ def _gross_savings(item: ExplainedIntervention) -> tuple[Decimal, str]:
             "με τιμή 0,20 €/kWh. Χρειάζονται μετρήσεις σε συγκρίσιμες συνθήκες πριν και μετά.",
         )
 
-    if item.type in {"shade_structure", "shaded_bench"} and item.shade_impact is None:
+    if item.type == "shade_structure" and item.shade_impact is None:
         return Decimal(0), "Χρειάζεται εκτίμηση της ποσότητας για να υπολογιστεί εξοικονόμηση."
     units = item.shade_impact.unit_count if item.shade_impact else 0
     if item.type == "shade_structure":
@@ -77,12 +72,6 @@ def _gross_savings(item: ExplainedIntervention) -> tuple[Decimal, str]:
             units * SEASONAL_RENTAL_PER_SHELTER_EUR,
             "Υποθέτουμε ότι κάθε μόνιμο σκίαστρο αντικαθιστά υφιστάμενη εποχική μίσθωση "
             "και εγκατάσταση προσωρινής σκίασης αξίας 4.800 € τον χρόνο.",
-        )
-    if item.type == "shaded_bench":
-        return (
-            units * SEASONAL_SETUP_PER_BENCH_EUR,
-            "Υποθέτουμε ότι κάθε σκιασμένο παγκάκι αντικαθιστά υφιστάμενη εποχική "
-            "δαπάνη 500 € τον χρόνο για προσωρινό εξοπλισμό καθιστικού και σκίασης στην ίδια θέση.",
         )
     if item.type == "tree_planting":
         return (

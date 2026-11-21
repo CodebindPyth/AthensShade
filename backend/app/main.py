@@ -29,7 +29,7 @@ from .models import (
     SourcesResponse,
 )
 from .optimizer import OptimizationError, optimize
-from .plan_card import LocalPlanCardEditor, PlanCard
+from .plan_card import LocalPlanCardEditor, MunicipalAdvice, PlanCard
 from .savings import SavingsScenario, calculate_savings
 from .semantic import ModelUnavailable, SemanticResult, keyword_search, semantic_search
 
@@ -112,6 +112,16 @@ def create_app(dataset_path: Path | None = None) -> FastAPI:
         if location_id not in analysis.locations:
             raise HTTPException(status_code=404, detail="Το σημείο δεν βρέθηκε.")
         return analysis.location_analysis(location_id)
+
+    @api.get("/locations/{location_id}/municipal-advice", tags=["Locations"])
+    def municipal_advice(
+        location_id: str, analysis: Annotated[AthensAnalysis, Depends(dataset_analysis)],
+    ) -> MunicipalAdvice:
+        site = analysis.locations.get(location_id)
+        notes = (site.municipal_asset or {}).get("notes") if site and site.heat_hotspot else None
+        if site is None or not notes:
+            raise HTTPException(status_code=404, detail="Δεν υπάρχει τεκμηριωμένη δημοτική θέση σε θερμή ζώνη.")
+        return card_editor.advise_municipal_site(site, notes)
 
     @api.get("/layers/{layer}", tags=["Map"])
     def read_layer(

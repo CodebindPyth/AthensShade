@@ -3,12 +3,12 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, HttpUrl, model_validator
 
-InterventionType = Literal["tree_planting", "shade_structure", "shaded_bench", "greenery", "green_roof"]
+InterventionType = Literal["tree_planting", "shade_structure", "greenery", "green_roof"]
 Feasibility = Literal["verified", "requires_site_inspection", "unsuitable"]
 PriorityBand = Literal["high", "standard", "unknown"]
 CostStatus = Literal["indicative", "verified"]
 PlanStatus = Literal["optimal", "feasible", "no_eligible_interventions", "no_affordable_interventions"]
-PlanStrategy = Literal["balanced", "immediate_shade", "shade_and_rest"]
+PlanStrategy = Literal["balanced", "immediate_shade", "tree_priority", "shade_and_rest"]
 ShadeHorizon = Literal["after_installation", "at_tree_maturity"]
 Percent = Annotated[float, Field(ge=0, le=100, allow_inf_nan=False)]
 Budget = Annotated[Decimal, Field(ge=0, le=100_000_000, decimal_places=2)]
@@ -66,6 +66,7 @@ class Location(BaseModel):
     population_density_per_km2: Annotated[FiniteFloat, Field(ge=0, le=10_000_000)] | None = None
     population_source_id: str | None = None
     population_grid_m: Annotated[int, Field(gt=0)] | None = None
+    municipal_asset: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def verify_population_metadata(self) -> "Location":
@@ -112,13 +113,13 @@ class Intervention(BaseModel):
     rationale: str
     shade_projection: ShadeProjection | None = None
     greened_roof_area_m2: Annotated[FiniteFloat, Field(gt=0, le=1_000_000)] | None = None
+    siting: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def verify_impact_metadata(self) -> "Intervention":
         expected_horizon = {
             "tree_planting": "at_tree_maturity",
             "shade_structure": "after_installation",
-            "shaded_bench": "after_installation",
         }
         if self.shade_projection and self.shade_projection.horizon != expected_horizon.get(self.type):
             raise ValueError(f"Shade horizon does not match intervention type {self.type}")
@@ -198,6 +199,7 @@ class ExplainedIntervention(BaseModel):
     priority_band: PriorityBand
     shade_impact: ShadeImpact | None
     greened_roof_area_m2: float | None
+    siting: dict[str, Any] | None = None
 
 
 class FootprintRange(BaseModel):

@@ -115,6 +115,7 @@ input[type="checkbox"] { flex: 0 0 auto; margin: 0; height: 18px; width: 18px; a
 .plan-detail-links { display: flex; flex-wrap: wrap; gap: 0 12px; }
 .impact-map-toggle { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin: 10px 0; }
 .impact-map-toggle[aria-pressed="true"] { background: #e7f4f1; color: #14564d; border-color: #328476; }
+.municipal-artwork { display: block; border-radius: 30%; object-fit: cover; }
 .impact-evaluation-link {
   display: inline-block;
   margin: 9px 0 3px;

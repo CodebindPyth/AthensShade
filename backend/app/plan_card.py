@@ -44,16 +44,6 @@ _ACTION_GUIDANCE: dict[InterventionType, tuple[Option, ...]] = {
         ("shade_materials", "Check which equipment the shelter protects from direct sun and whether maintenance needs fall",
          "Έλεγξε ποιος εξοπλισμός σκιάζεται στις ώρες αιχμής και κατέγραψε αν μειώνονται οι εργασίες συντήρησής του."),
     ),
-    "shaded_bench": (
-        ("access", "Check step-free access and space beside the bench",
-         "Έλεγξε την προσβάσιμη όδευση και τον ελεύθερο χώρο δίπλα στο κάθισμα."),
-        ("seat_shade", "Verify shade falls onto the entire seating area during the hottest hours",
-         "Επαλήθευσε ότι το σκίαστρο καλύπτει τα καθίσματα στις θερμότερες ώρες."),
-        ("bench_setup", "Identify existing temporary seating or shade setup spending the bench would replace",
-         "Έλεγξε αν το παγκάκι αντικαθιστά έξοδα που ήδη πληρώνει ο Δήμος για προσωρινά καθίσματα και σκίαση."),
-        ("bench_wear", "Compare surface wear and maintenance records for identical seats with and without UV protection",
-         "Σύγκρινε τη φθορά και τις επαναβαφές σε όμοια παγκάκια με διαφορετική έκθεση στον ήλιο."),
-    ),
     "greenery": (
         ("water", "Verify drainage and irrigation supply on site",
          "Επιβεβαίωσε την αποστράγγιση και τη δυνατότητα άρδευσης πριν οριστικοποιηθεί η φύτευση."),
@@ -82,6 +72,12 @@ class PlanCard(BaseModel):
     discounted_payback_year: int | None
     required_annual_savings_eur: float | None
     savings: SavingsScenario
+
+
+class MunicipalAdvice(BaseModel):
+    source: Literal["local_model", "verified_template"]
+    model: str | None
+    recommendation: str
 
 
 class _GuidanceSelection(BaseModel):
@@ -135,6 +131,17 @@ class LocalPlanCardEditor:
             for item in items
             for key, label, text in (*_ACTION_GUIDANCE[item.type], context)
         }
+        siting_checks = [item.siting for item in items if item.siting and item.siting.get("status") == "candidate"]
+        if siting_checks:
+            options["pedestrian_check"] = (
+                "Verify pedestrian clear passage and buried utilities at the GIS-screened placement",
+                "Μέτρησε την ελεύθερη όδευση στην προελεγμένη θέση και έλεγξε τα υπόγεια δίκτυα πριν οριστεί η εγκατάσταση.",
+            )
+        if any((check.get("evidence") or {}).get("constraint_note") for check in siting_checks):
+            options["structural_constraint"] = (
+                "Check structural capacity and permitted mounting above the documented underground structure",
+                "Ζήτησε έλεγχο στατικής επάρκειας και επιτρεπόμενης στήριξης πάνω από την υπόγεια κατασκευή.",
+            )
         scenario = json.dumps({
             "site": site.name,
             "hotspot": site.heat_hotspot,
@@ -143,18 +150,9 @@ class LocalPlanCardEditor:
             "site_inspection_required": requires_inspection,
             "goal": strategy,
             "actions": sorted({item.type for item in items}),
+            "screened_public_space": bool(siting_checks),
         }, ensure_ascii=False)
-        choice = None
-        if self._enabled:
-            with self._lock:
-                if monotonic() >= self._retry_at:
-                    try:
-                        choice = self._select_cached(
-                            scenario, tuple((key, value[0]) for key, value in options.items()),
-                        )
-                    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as exc:
-                        self._retry_at = monotonic() + 15
-                        LOGGER.info("Local planning model unavailable: %s", type(exc).__name__)
+        choice = self._choose(scenario, tuple((key, value[0]) for key, value in options.items()))
 
         # The model selects a relevant verified instruction. All rendered text and figures are controlled here.
         focus = choice or next(iter(options))
@@ -175,6 +173,35 @@ class LocalPlanCardEditor:
             savings=calculate_savings(items),
         )
 
+    def advise_municipal_site(self, site: RankedLocation, notes: list[str]) -> MunicipalAdvice:
+        options = {f"site-{index}": note for index, note in enumerate(notes)}
+        scenario = json.dumps({
+            "site": site.name,
+            "goal": "Choose the safest first intervention study for a verified hot municipal site",
+            "asset": (site.municipal_asset or {}).get("kind"),
+            "heritage": bool((site.municipal_asset or {}).get("heritage")),
+            "hotspot": site.heat_hotspot,
+        }, ensure_ascii=False)
+        choice = self._choose(scenario, tuple(options.items()))
+        return MunicipalAdvice(
+            source="local_model" if choice else "verified_template",
+            model=self._model if choice else None,
+            recommendation=options[choice] if choice else notes[0],
+        )
+
+    def _choose(self, scenario: str, options: tuple[tuple[str, str], ...]) -> str | None:
+        if not self._enabled:
+            return None
+        with self._lock:
+            if monotonic() < self._retry_at:
+                return None
+            try:
+                return self._select_cached(scenario, options)
+            except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as exc:
+                self._retry_at = monotonic() + 15
+                LOGGER.info("Local planning model unavailable: %s", type(exc).__name__)
+                return None
+
     def _select(self, scenario: str, options: tuple[tuple[str, str], ...]) -> str:
         system = (
             "Select the best next verification step for the supplied heat adaptation site. When relevant, "
@@ -183,7 +210,7 @@ class LocalPlanCardEditor:
             "one 'focus' field."
         )
         choices = dict(options)
-        prompt = f"Site data: {scenario}\nAvailable focus IDs: {json.dumps(choices)}"
+        prompt = f"Site data: {scenario}\nAvailable focus IDs: {json.dumps(choices, ensure_ascii=False)}"
         schema = {
             "type": "object",
             "properties": {"focus": {"type": "string", "enum": list(choices)}},

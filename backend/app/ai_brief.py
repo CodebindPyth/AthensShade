@@ -87,7 +87,8 @@ class BriefEditor:
         options = {
             "goal": {
                 "immediate_shade": "άμεση σκίαση",
-                "shade_and_rest": "άμεση σκίαση και προσβάσιμες στάσεις ξεκούρασης",
+                "tree_priority": "φύτευση περισσότερων δέντρων σε θερμές θέσεις",
+                "shade_and_rest": "φύτευση περισσότερων δέντρων σε θερμές θέσεις",
             }.get(strategy, "ισορροπημένο πλάνο"),
             "priorities": dict(priorities),
             "verification_steps": dict(steps),

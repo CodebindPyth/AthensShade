@@ -48,13 +48,6 @@ EVIDENCE: dict[InterventionType, Evidence] = {
         ),
         url="https://www.sciencedirect.com/science/article/pii/S0378778815003540",
     ),
-    "shaded_bench": Evidence(
-        metric="Σκίαση καθιστικού",
-        description=(
-            "Η πραγματική σκίαση εξαρτάται από την ώρα, τον προσανατολισμό και τα ανοίγματα της πέργκολας. "
-            "Μετρήστε τη σκίαση και τη θερμική άνεση στο κάθισμα αφού τοποθετηθεί."
-        ),
-    ),
     "greenery": Evidence(
         metric="Θερμοκρασία επιφάνειας χώρου πρασίνου",
         description=(

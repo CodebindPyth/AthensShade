@@ -24,7 +24,6 @@ export const shadeArea = (lower: number, upper: number) => lower === upper ? `${
 const typeLabels: Record<string, string> = {
   tree_planting: "Φύτευση δέντρων",
   shade_structure: "Εγκατάσταση σκιάστρου",
-  shaded_bench: "Σκιασμένα παγκάκια",
   greenery: "Προσθήκη πρασίνου",
   green_roof: "Φυτεμένο δώμα",
   pocket_park: "Μικρός χώρος πρασίνου",

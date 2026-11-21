@@ -31,7 +31,6 @@ def optimize(analysis: AthensAnalysis, request: OptimizeRequest) -> Plan:
             row for row in analysis.dataset.interventions
             if row.feasibility in eligible
             and (not request.priority_only or analysis.locations[row.location_id].priority_band == "high")
-            and (row.type != "shaded_bench" or request.strategy == "shade_and_rest")
         ),
         key=lambda row: row.id,
     )
@@ -135,16 +134,12 @@ def solve(
     order = cp_model.LinearExpr.weighted_sum(selected, range(1, len(selected) + 1))
     # Freeze each proven optimum before considering the next objective.
     objectives = [hotspot_count]
-    if strategy == "shade_and_rest":
-        available_kinds = []
-        for kind in ("tree_planting", "shade_structure", "shaded_bench", "green_roof"):
-            matching = [var for var, option in zip(selected, options, strict=True) if option.type == kind]
-            if matching:
-                present = model.new_bool_var(f"has_{kind}")
-                model.add_max_equality(present, matching)
-                available_kinds.append(present)
-        if available_kinds:
-            objectives.append(cp_model.LinearExpr.sum(available_kinds))
+    if strategy in {"tree_priority", "shade_and_rest"}:
+        tree_counts = [
+            option.shade_impact.unit_count if option.type == "tree_planting" and option.shade_impact else 0
+            for option in options
+        ]
+        objectives.insert(0, cp_model.LinearExpr.weighted_sum(selected, tree_counts))
     objectives.append(population_exposure)
     if strategy == "immediate_shade":
         immediate_footprints = [

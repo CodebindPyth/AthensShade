@@ -1,10 +1,11 @@
 "use client"
 
-import { ArrowDownUp, CheckCircle2, CircleAlert, FileText, House, MapPin, Minus, Plus, ShieldCheck, Thermometer, TreeDeciduous } from "lucide-react"
+import { ArrowDownUp, CheckCircle2, CircleAlert, FileText, Minus, Plus, ShieldCheck, Thermometer } from "lucide-react"
 import type { FormEvent } from "react"
 import type { Comparison, Location, Plan, Strategy } from "../lib/api"
 import { euros, feasibilityLabel, interventionLabel, shadeArea } from "../lib/format"
 import { ImpactCard, ImpactComparison } from "./plan-impact"
+import { InterventionSymbol } from "./intervention-symbol"
 
 type PlannerProps = {
   budget: string
@@ -58,7 +59,7 @@ export function Planner(props: PlannerProps) {
           <select id="plan-strategy" value={props.strategy} onChange={(event) => props.setStrategy(event.target.value as Strategy)}>
             <option value="balanced">Ισορροπημένο πλάνο</option>
             <option value="immediate_shade">Άμεση σκίαση</option>
-            <option value="shade_and_rest">Σκίαση και ξεκούραση</option>
+            <option value="tree_priority">Περισσότερα δέντρα</option>
           </select>
         </div>
         <label className="inspection-check">
@@ -111,7 +112,7 @@ export function Planner(props: PlannerProps) {
                 {plan.selected.map((item) => (
                   <li key={item.id}>
                     <button type="button" onClick={() => onSelectLocation(item.location_id)}>
-                      <span className="intervention-icon">{item.type === "green_roof" ? <House size={17} /> : item.type === "tree_planting" || item.type === "greenery" ? <TreeDeciduous size={17} /> : <MapPin size={17} />}</span>
+                      <span className="intervention-icon"><InterventionSymbol type={item.type} size={17} /></span>
                       <span className="intervention-description">
                         <strong>{locations.get(item.location_id)?.name ?? item.location_id}</strong>
                         <span>{interventionLabel(item.type)}</span>

@@ -38,7 +38,7 @@ export default function AthensShade() {
   const [budget, setBudget] = useState(String(defaultBudget))
   const [baseline, setBaseline] = useState("50000")
   const [includeInspection, setIncludeInspection] = useState(true)
-  const [strategy, setStrategy] = useState<Strategy>("shade_and_rest")
+  const [strategy, setStrategy] = useState<Strategy>("tree_priority")
   const [plan, setPlan] = useState<Plan | null>(null)
   const [impactPlan, setImpactPlan] = useState<Plan | null>(null)
   const [busy, setBusy] = useState(false)
@@ -167,6 +167,7 @@ export default function AthensShade() {
   const mappedPlan = isStale || busy ? null : plan
   const showImpact = mappedPlan !== null && impactPlan === mappedPlan
   const selectedHasTree = mappedPlan?.selected.some((item) => item.location_id === selectedId)
+    || selectedLocation?.municipal_asset && selectedLocation.heat_hotspot
   const currentComparison = comparison?.baseline.budget_eur === parseBudget(baseline)
     && comparison.proposed.budget_eur === parseBudget(budget)
     && comparison.proposed.include_inspection === includeInspection
@@ -304,6 +305,8 @@ function SiteDetails({ location, analysis, failed, sourceById, heatThreshold, tr
   const dataSources = [...dataSourceIds].flatMap((id) => sourceById.get(id) ?? [])
   const heatText = location.heat_c === null ? "Άγνωστη" : temperature(location.heat_c)
   const treeText = location.canopy_percent === null ? "Άγνωστη" : `${numeric(location.canopy_percent)}%`
+  const actionable = analysis?.interventions.filter((item) => item.feasibility !== "unsuitable") ?? []
+  const blockedReason = analysis?.interventions.find((item) => item.feasibility === "unsuitable")?.siting?.message
   return (
     <section className="panel site-details" id="site-analysis" aria-labelledby="site-title" tabIndex={-1}>
       <div className="detail-heading">
@@ -328,9 +331,10 @@ function SiteDetails({ location, analysis, failed, sourceById, heatThreshold, tr
       </dl>
       {analysis ? <p>{analysis.explanation}</p> : failed ? <p role="alert">Δεν ήταν δυνατή η φόρτωση της ανάλυσης.</p> : <p role="status">Φόρτωση ανάλυσης…</p>}
       {heatThreshold != null && treeThreshold != null && <p className="muted">Όριο θερμής ζώνης {temperature(heatThreshold)} · Όριο χαμηλής δενδροκάλυψης {numeric(treeThreshold)}%</p>}
-      {analysis && analysis.interventions.length > 0 && (
+      {blockedReason && <p className="muted">{blockedReason}</p>}
+      {actionable.length > 0 && (
         <ul className="detail-interventions">
-          {analysis.interventions.map((item) => (
+          {actionable.map((item) => (
             <li key={item.id}>
               <div><strong>{interventionLabel(item.type)}</strong><span>{euros(item.cost_eur)} · {item.cost_status === "verified" ? "Τεκμηριωμένο κόστος" : "Ενδεικτικό κόστος"}</span></div>
               <small className={item.feasibility === "verified" ? "verified-text" : "inspection-text"}>{feasibilityLabel(item.feasibility)}</small>

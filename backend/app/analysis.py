@@ -1,7 +1,7 @@
 from collections import defaultdict
+from decimal import ROUND_HALF_UP, Decimal
 from statistics import quantiles
 
-from .bench_scenarios import add_shaded_bench_scenarios
 from .models import (
     Dataset,
     ExplainedIntervention,
@@ -12,13 +12,73 @@ from .models import (
     RankedLocation,
     ShadeImpact,
 )
+from .municipal_sites import add_municipal_sites
+from .siting import assess_siting
 
 TREE_DEFICIT_THRESHOLD_PERCENT = 15
+ATHENS_STREET_SOURCES = {"athens-sites", "athens-atlas", "copernicus-canopy"}
+
+
+def screen_ground_intervention(intervention: Intervention) -> Intervention:
+    assessment = assess_siting(intervention.location_id, intervention.type)
+    evidence = assessment.evidence
+    shade = intervention.shade_projection
+    if assessment.status != "candidate" or evidence is None:
+        return intervention.model_copy(update={
+            "feasibility": "unsuitable",
+            "siting": assessment.model_dump(mode="json", exclude={"evidence": {"geometry"}}),
+        })
+
+    updates = {"feasibility": "requires_site_inspection"}
+    if intervention.type == "tree_planting" and shade:
+        tree_capacity = max(1, int(evidence.available_area_m2 // 16))
+        count = min(shade.unit_count, tree_capacity)
+        if count < shade.unit_count:
+            price = (intervention.cost_eur * count / shade.unit_count).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            updates.update(
+                cost_eur=price,
+                cost_status="indicative",
+                shade_projection=shade.model_copy(update={"unit_count": count}),
+                rationale=(
+                    f"Σενάριο έως {count} δέντρων με ενδεικτική κατανομή 16 m² ανά δέντρο στη "
+                    "χαρτογραφημένη ζώνη. Το κόστος προσαρμόζεται αναλογικά. Η αυτοψία επιβεβαιώνει "
+                    "τη διάταξη, τις υφιστάμενες φυτεύσεις, τα δίκτυα και τον χώρο ριζοβολίας."
+                ),
+            )
+    if intervention.type == "shade_structure" and shade:
+        original_area = shade.unit_count * shade.unit_projection_max_m2
+        # Leave half of the mapped area free and preserve a margin around the anchor.
+        area = int(min(original_area, evidence.available_area_m2 / 2, 4 * (evidence.edge_clearance_m - 1.5) ** 2))
+        assessment = assess_siting(intervention.location_id, intervention.type, max(36, area))
+        if area < 16 or assessment.status != "candidate":
+            updates["feasibility"] = "unsuitable"
+            if assessment.status == "candidate":
+                assessment = assessment.model_copy(update={
+                    "status": "insufficient_space",
+                    "message": "Το χαρτογραφημένο σημείο δεν αφήνει αρκετό χώρο για στήριξη και διέλευση.",
+                })
+        elif area < original_area:
+            price = (intervention.cost_eur * Decimal(area) / Decimal(str(original_area))).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP,
+            )
+            updates.update(
+                cost_eur=price,
+                cost_status="indicative",
+                shade_projection=shade.model_copy(update={
+                    "unit_count": 1, "unit_projection_min_m2": area, "unit_projection_max_m2": area,
+                }),
+                rationale=(
+                    f"Ενδεικτικό σκίαστρο {area} m² με αναλογική προσαρμογή του αρχικού κόστους. "
+                    "Η ζώνη πεζών περιορίζει το μέγεθος. Η αυτοψία ελέγχει ελεύθερη όδευση, "
+                    "εμπόδια, στήριξη και προσανατολισμό."
+                ),
+            )
+    updates["siting"] = assessment.model_dump(mode="json")
+    return intervention.model_copy(update=updates)
 
 
 class AthensAnalysis:
     def __init__(self, dataset: Dataset) -> None:
-        self.dataset = dataset
         # Both the map and priority rule use the same temperature distribution when available.
         temperatures = [float(feature.properties["temperature_c"]) for feature in dataset.heat.features]
         if not temperatures:
@@ -29,8 +89,16 @@ class AthensAnalysis:
         if len(temperatures) > 1:
             self.hotspot_threshold = quantiles(temperatures, n=4, method="inclusive")[2]
 
+        dataset = add_municipal_sites(dataset, self.hotspot_threshold)
+        if ATHENS_STREET_SOURCES.issubset(source.id for source in dataset.sources):
+            dataset = dataset.model_copy(update={"interventions": [
+                screen_ground_intervention(item)
+                if item.type in {"tree_planting", "shade_structure", "greenery"} and item.feasibility != "unsuitable"
+                else item
+                for item in dataset.interventions
+            ]})
+        self.dataset = dataset
         self.locations = {location.id: self.rank(location) for location in dataset.locations}
-        self.dataset = add_shaded_bench_scenarios(dataset, self.locations)
         self.interventions_by_location: dict[str, list[Intervention]] = defaultdict(list)
         for intervention in self.dataset.interventions:
             self.interventions_by_location[intervention.location_id].append(intervention)
@@ -131,6 +199,7 @@ class AthensAnalysis:
             priority_band=location.priority_band,
             shade_impact=shade_impact,
             greened_roof_area_m2=intervention.greened_roof_area_m2,
+            siting=intervention.siting,
         )
 
     def location_analysis(self, location_id: str) -> LocationAnalysis:
