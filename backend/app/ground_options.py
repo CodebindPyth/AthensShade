@@ -25,9 +25,21 @@ SITING_SOURCE = Source(
 
 
 def ground_cost(kind: str, units: int) -> Decimal:
+    """Estimate routine installation. Units are trees or square meters of shelter."""
     if kind == "tree_planting":
-        return Decimal(8_000 + 300 * units)
-    return Decimal(12_000) + Decimal("69.43") * units
+        return Decimal(1_250 + 300 * units)
+    return Decimal(3_500) + Decimal("69.43") * units
+
+
+def planning_cost(intervention: Intervention) -> Decimal:
+    """Allow for unresolved site works when selecting a screened plan."""
+    if not (intervention.siting or {}).get("anchors") or not intervention.shade_projection:
+        return intervention.cost_eur
+    if intervention.type == "tree_planting":
+        return intervention.cost_eur + Decimal(6_750)
+    if intervention.type == "shade_structure":
+        return intervention.cost_eur + Decimal(8_500)
+    return intervention.cost_eur
 
 
 def add_ground_sites(dataset: Dataset, threshold: float | None) -> Dataset:

@@ -100,9 +100,15 @@ export function Planner(props: PlannerProps) {
         {plan && (
           <>
             <div className="plan-totals">
-              <div><span>Εκτιμώμενο κόστος</span><strong>{euros(plan.total_cost_eur)}</strong></div>
-              <div><span>Υπόλοιπο</span><strong className="remaining">{euros(plan.remaining_budget_eur)}</strong></div>
+              <div><span>Εκτιμώμενο κόστος εγκατάστασης</span><strong>{euros(plan.total_cost_eur)}</strong></div>
+              <div><span>Υπόλοιπο μετά την εγκατάσταση</span><strong className="remaining">{euros(plan.remaining_budget_eur)}</strong></div>
             </div>
+            {plan.site_works_allowance_eur ? (
+              <p className="notice">
+                Από το υπόλοιπο, έως {euros(plan.site_works_allowance_eur)} προβλέπονται για πρόσθετες εργασίες
+                υπό αυτοψία. Με ολόκληρη την πρόβλεψη, μένουν {euros(plan.remaining_budget_eur - plan.site_works_allowance_eur)} αδιάθετα.
+              </p>
+            ) : null}
             {plan.include_inspection ? (
               <p className="notice notice--inspection"><CircleAlert size={17} /> Οι προτεινόμενες θέσεις χρειάζονται επιτόπια επιβεβαίωση.</p>
             ) : (

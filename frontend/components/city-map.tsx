@@ -82,7 +82,7 @@ function proposalPoint(location: Location, intervention?: Intervention) {
 }
 
 // This is a planning catchment, independent of the modeled temperature under the canopy.
-const neighborhoodRadiusM = 750
+const neighborhoodRadiusM = 500
 
 function neighborhoodZone(map: L.Map, center: L.LatLng) {
   const bounds = center.toBounds(neighborhoodRadiusM * 2)

@@ -1,3 +1,4 @@
+from decimal import Decimal
 from itertools import combinations
 from math import cos, hypot, radians
 
@@ -51,6 +52,22 @@ def test_ground_options_use_screened_geometry_and_respect_capacity():
     tree = next(item for item in kotzia.interventions if item.type == "tree_planting")
     assert tree.feasibility == "unsuitable"
     assert tree.siting["evidence"]["constraint_source_url"].startswith("https://www.daem.gr/")
+
+
+def test_ground_plan_separates_installation_from_site_works_allowance():
+    stat = DEFAULT_DATASET_PATH.stat()
+    analysis = load_dataset(DEFAULT_DATASET_PATH, stat.st_mtime_ns, stat.st_size)
+    plan = optimize(analysis, OptimizeRequest(
+        budget_eur=100_000, include_inspection=True, priority_only=True, strategy="balanced",
+    ))
+    installation = sum(Decimal(str(item.cost_eur)) for item in plan.selected)
+    remaining = Decimal(str(plan.remaining_budget_eur))
+
+    assert installation == Decimal(str(plan.total_cost_eur))
+    assert installation + remaining == Decimal("100000.00")
+    assert Decimal("0") < Decimal(str(plan.site_works_allowance_eur)) <= remaining
+    assert sum(item.shade_impact.unit_count for item in plan.selected if item.type == "tree_planting") == 47
+    assert sum(item.shade_impact.unit_count for item in plan.selected if item.type == "shade_structure") == 1
 
 
 def test_municipal_advice_is_grounded_in_registered_heat_site(monkeypatch):

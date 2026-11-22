@@ -253,6 +253,7 @@ class Plan(BaseModel):
     budget_eur: float
     total_cost_eur: float
     remaining_budget_eur: float
+    site_works_allowance_eur: float = 0
     modeled_benefit: float
     selected: list[ExplainedIntervention]
     status: PlanStatus

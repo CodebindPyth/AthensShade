@@ -5,7 +5,7 @@ from functools import lru_cache
 from ortools.sat.python import cp_model
 
 from .analysis import AthensAnalysis
-from .ground_options import tree_variants
+from .ground_options import planning_cost, tree_variants
 from .models import (
     ExplainedIntervention,
     FootprintRange,
@@ -47,13 +47,12 @@ def _cached_plan(
         ),
         key=lambda row: row.id,
     )
-    affordable = [
-        variant for row in candidates for variant in tree_variants(row)
-        if variant.cost_eur <= budget_eur
-    ]
+    variants = [variant for row in candidates for variant in tree_variants(row)]
+    affordable = [(variant, cost) for variant in variants if (cost := planning_cost(variant)) <= budget_eur]
     status: PlanStatus
     picks: list[ExplainedIntervention] = []
     total_cost = Decimal()
+    site_works_allowance = Decimal()
     selected_densities: list[float] = []
 
     if not candidates:
@@ -61,8 +60,8 @@ def _cached_plan(
     elif not affordable:
         status = "no_affordable_interventions"
     else:
-        costs = [int(row.cost_eur * 100) for row in affordable]
-        options = [analysis.explain_intervention(row) for row in affordable]
+        costs = [int(cost * 100) for _, cost in affordable]
+        options = [analysis.explain_intervention(row) for row, _ in affordable]
         densities = [
             analysis.locations[option.location_id].population_density_per_km2
             if option.priority_band == "high"
@@ -79,7 +78,8 @@ def _cached_plan(
             options[index].id,
         ))
         picks = [options[index] for index in selected_indices]
-        total_cost = sum((affordable[index].cost_eur for index in selected_indices), start=Decimal())
+        total_cost = sum((affordable[index][0].cost_eur for index in selected_indices), start=Decimal())
+        site_works_allowance = sum((affordable[index][1] for index in selected_indices), start=Decimal()) - total_cost
         selected_densities = [densities[index] for index in selected_indices if densities[index] is not None]
 
     return Plan(
@@ -87,6 +87,7 @@ def _cached_plan(
         budget_eur=float(budget_eur),
         total_cost_eur=float(total_cost),
         remaining_budget_eur=float(budget_eur - total_cost),
+        site_works_allowance_eur=float(site_works_allowance),
         modeled_benefit=round(sum(row.modeled_benefit for row in picks), 3),
         selected=picks,
         status=status,

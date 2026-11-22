@@ -120,6 +120,7 @@ export type Plan = Scenario & {
   dataset_version: string
   total_cost_eur: number
   remaining_budget_eur: number
+  site_works_allowance_eur?: number
   modeled_benefit: number
   selected: Intervention[]
   status: string
